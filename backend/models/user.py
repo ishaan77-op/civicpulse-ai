@@ -15,3 +15,6 @@ class User(db.Model):
     role = db.Column(db.String(20), default="Citizen")
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<User {self.email}>"
