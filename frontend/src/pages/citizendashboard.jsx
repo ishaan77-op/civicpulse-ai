@@ -1,0 +1,6 @@
+import { Link } from 'react-router-dom'
+import AppShell from '../components/appshell.jsx'
+
+export default function Dashboard() {
+  return <AppShell eyebrow="Your civic space" title="Your dashboard"><section className="dashboard-hero"><div><h2>Make your voice count.</h2><p>Report a concern, follow its progress, and stay connected to the civic work taking place around you.</p></div><Link className="button button-primary" to="/report">Report an Issue <span aria-hidden="true">→</span></Link></section><section className="dashboard-grid"><article><span className="dashboard-icon">↗</span><h2>Report a concern</h2><p>Share the details of a civic issue and give it a clearer path forward.</p><Link to="/report">Create a report <span>→</span></Link></article><article><span className="dashboard-icon">◷</span><h2>Track your reports</h2><p>Review the civic issues you have submitted and check their latest status.</p><Link to="/complaints">View my complaints <span>→</span></Link></article><article><span className="dashboard-icon">⌁</span><h2>Keep your profile current</h2><p>See the account information connected to your CivicPulse experience.</p><Link to="/profile">View profile <span>→</span></Link></article></section></AppShell>
+}
