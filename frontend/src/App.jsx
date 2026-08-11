@@ -5,6 +5,7 @@ import HowItWorks from './pages/how-it-works.jsx'
 import About from './pages/about.jsx'
 import Login from './pages/login.jsx'
 import Register from './pages/register.jsx'
+import MapTest from './pages/maptest.jsx'
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
         <Route path="/about" element={<About />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/map-test" element={<MapTest />} />
         <Route path="*" element={<Home />} />
       </Routes>
     </BrowserRouter>
