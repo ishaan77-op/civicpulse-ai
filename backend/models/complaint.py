@@ -27,6 +27,26 @@ class Complaint(db.Model):
         default="Other"
     )
 
+    ai_priority = db.Column(
+        db.String(20),
+        nullable=True
+    )
+
+    ai_department = db.Column(
+        db.String(100),
+        nullable=True
+    )
+
+    ai_visual_observation = db.Column(
+        db.Text,
+        nullable=True
+    )
+
+    ai_summary = db.Column(
+        db.Text,
+        nullable=True
+    )
+
     location = db.Column(
         db.String(255),
         nullable=False
