@@ -11,6 +11,9 @@ import Report from './pages/report.jsx'
 import Complaints from './pages/complaints.jsx'
 import ComplaintDetails from './pages/complaintdetails.jsx'
 import Profile from './pages/profile.jsx'
+import OfficerDashboard from './pages/officerdashboard.jsx'
+import AdminDashboard from './pages/admindashboard.jsx'
+import NotFound from './pages/notfound.jsx'
 
 function App() {
   return (
@@ -28,8 +31,10 @@ function App() {
           <Route path="/complaints" element={<Complaints />} />
           <Route path="/complaints/:id" element={<ComplaintDetails />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/officer" element={<OfficerDashboard />} />
+          <Route path="/admin" element={<AdminDashboard />} />
         </Route>
-        <Route path="*" element={<Home />} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
   )

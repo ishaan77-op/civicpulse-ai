@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useContext, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { AuthContext } from '../context/authcontextvalue.jsx'
 
 const navigation = [
   { label: 'Home', to: '/' },
@@ -18,6 +19,7 @@ function Brand() {
 }
 
 export default function Navbar() {
+  const { user, isAuthenticated } = useContext(AuthContext) || {}
   const [isOpen, setIsOpen] = useState(false)
   const closeMenu = () => setIsOpen(false)
 
@@ -33,8 +35,16 @@ export default function Navbar() {
             {navigation.map((item) => <Link key={item.label} to={item.to} onClick={closeMenu}>{item.label}</Link>)}
           </div>
           <div className="nav-actions">
-            <Link className="text-link" to="/login" onClick={closeMenu}>Sign In</Link>
-            <Link className="button button-small button-primary" to="/register" onClick={closeMenu}>Register <span aria-hidden="true">→</span></Link>
+            {isAuthenticated ? (
+              <Link className="button button-small button-primary" to="/dashboard" onClick={closeMenu}>
+                Dashboard ({user?.name || 'Account'}) <span aria-hidden="true">→</span>
+              </Link>
+            ) : (
+              <>
+                <Link className="text-link" to="/login" onClick={closeMenu}>Sign In</Link>
+                <Link className="button button-small button-primary" to="/register" onClick={closeMenu}>Register <span aria-hidden="true">→</span></Link>
+              </>
+            )}
           </div>
         </div>
       </nav>
