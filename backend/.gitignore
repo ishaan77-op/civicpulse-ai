@@ -1,0 +1,29 @@
+# Environment / secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# SQLite database
+instance/
+*.db
+
+# Uploaded files
+uploads/
+
+# Local test images
+pothole.jpg
+
+# Test files
+test_ai.py
+test_ai_service.py
+test_combined_ai.py
+test_image.py
+test_nemotron.py
+test_auditor.py
