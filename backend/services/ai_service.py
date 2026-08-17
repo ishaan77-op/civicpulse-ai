@@ -7,12 +7,11 @@ from google.genai import types
 
 load_dotenv()
 
-api_key = os.getenv("GEMINI_API_KEY")
-
-if not api_key:
-    raise RuntimeError("GEMINI_API_KEY not found in .env")
-
-client = genai.Client(api_key=api_key)
+def get_client():
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY not found in .env")
+    return genai.Client(api_key=api_key)
 
 
 def analyze_complaint(title, description, location, image_path=None):
@@ -89,6 +88,7 @@ Rules:
             )
         )
 
+    client = get_client()
     response = client.models.generate_content(
         model="gemini-3.6-flash",
         contents=contents
