@@ -472,12 +472,7 @@ function MapPicker({
       clearTimeout(searchTimeoutRef.current)
     }
 
-    if (query.length < 2) {
-      setSearchResults([])
-      setSearching(false)
-      setSearchError('')
-      return
-    }
+    if (query.length < 2) return undefined
 
     searchTimeoutRef.current = setTimeout(() => {
       fetchSuggestions(query)
@@ -489,6 +484,17 @@ function MapPicker({
       }
     }
   }, [searchQuery])
+
+  const handleSearchQueryChange = (value) => {
+    setSearchQuery(value)
+
+    if (value.trim().length < 2) {
+      setSearchResults([])
+      setSearching(false)
+      setSearchError('')
+      setShowSuggestions(false)
+    }
+  }
 
   /*
    * Select autocomplete result.
@@ -629,7 +635,7 @@ function MapPicker({
             type="search"
             value={searchQuery}
             onChange={(event) => {
-              setSearchQuery(event.target.value)
+              handleSearchQueryChange(event.target.value)
               setShowSuggestions(true)
             }}
             onFocus={() => {

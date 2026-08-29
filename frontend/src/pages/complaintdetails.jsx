@@ -5,11 +5,12 @@ import { apiErrorMessage } from '../services/api.js'
 import { getComplaint, updateComplaint } from '../services/complaintservice.js'
 
 const categories = [
-  'Roads',
-  'Street lighting',
-  'Sanitation',
-  'Water',
-  'Public safety',
+  'Road Infrastructure',
+  'Street Lighting',
+  'Garbage and Waste',
+  'Water Supply',
+  'Drainage',
+  'Public Safety',
   'Other',
 ]
 

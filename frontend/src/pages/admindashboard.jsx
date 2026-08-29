@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import AppShell from '../components/appshell.jsx'
 import { apiErrorMessage } from '../services/api.js'
 import { getAdminAnalytics, getAdminUsers, updateUserRole } from '../services/complaintservice.js'
@@ -9,9 +9,10 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('analytics') // 'analytics' | 'users'
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [actionError, setActionError] = useState('')
   const [roleUpdatingId, setRoleUpdatingId] = useState(null)
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true)
       setError('')
@@ -26,19 +27,21 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
-    fetchData()
-  }, [])
+    const timer = window.setTimeout(fetchData, 0)
+    return () => window.clearTimeout(timer)
+  }, [fetchData])
 
   const handleRoleChange = async (userId, newRole) => {
     try {
+      setActionError('')
       setRoleUpdatingId(userId)
       await updateUserRole(userId, newRole)
       await fetchData()
     } catch (err) {
-      alert(apiErrorMessage(err, 'Failed to update user role.'))
+      setActionError(apiErrorMessage(err, 'Failed to update user role.'))
     } finally {
       setRoleUpdatingId(null)
     }
@@ -63,6 +66,8 @@ export default function AdminDashboard() {
           👥 User Role Management ({users.length})
         </button>
       </div>
+
+      {actionError && <p className="form-message error" role="alert">{actionError}</p>}
 
       {loading ? (
         <p className="page-state">Gathering platform intelligence metrics...</p>

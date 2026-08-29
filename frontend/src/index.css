@@ -92,3 +92,47 @@
   .admin-breakdown-grid { grid-template-columns: 1fr; }
 }
 
+/* NMC-SmartFix visual system — warm public-service palette with iOS-inspired glass surfaces. */
+:root { color: #17251f; background: #f5f7f1; }
+body { background: radial-gradient(circle at 8% 5%, #fff4df 0, transparent 23rem), radial-gradient(circle at 90% 14%, #e2f4df 0, transparent 26rem), #f5f7f1; }
+.site-header { backdrop-filter: blur(18px) saturate(145%); background: rgba(255,255,255,.54); border-bottom: 1px solid rgba(255,255,255,.75); }
+.app-header { background: rgba(255,255,255,.62); border-color: rgba(28,95,43,.11); backdrop-filter: blur(20px) saturate(150%); position: sticky; top: 0; z-index: 10; }
+.brand { color: #112e25; gap: 9px; }
+.brand-logo { width: 36px; height: 36px; object-fit: cover; object-position: 50% 19%; border-radius: 12px; border: 1px solid rgba(255,255,255,.84); box-shadow: 0 7px 15px rgba(19,71,39,.18); }
+.brand-name { letter-spacing: -1px; font-size: 17px; }
+.brand em { color: #1e7a34; }
+.brand-mark { background: linear-gradient(135deg,#ed7b24,#26743c); box-shadow: 0 7px 15px #ea7a2540; }
+.nav-links a:hover,.text-link:hover,.footer-links a:hover,.preview-link,.dashboard-grid a,.complaint-category,.complaint-meta b { color:#1d7433; }
+.button-primary { background: linear-gradient(135deg,#1e7b37,#12622b); box-shadow: 0 13px 26px rgba(28,113,50,.26); }
+.button-primary:hover { background: linear-gradient(135deg,#17652d,#0e5124); box-shadow: 0 16px 30px rgba(28,113,50,.31); }
+.button-secondary { background: rgba(255,255,255,.58); border-color: rgba(31,103,47,.15); backdrop-filter: blur(14px); }
+.button-secondary:hover { border-color:#ed8b36; background:#fffaf3; }
+.button-white { color:#176d30; }
+.eyebrow,.section-label { color:#bd5911; }
+.eyebrow { background:rgba(255,247,231,.76); border-color:rgba(237,139,54,.25); backdrop-filter:blur(10px); }
+.eyebrow-dot { background:#e87a23; box-shadow:0 0 0 4px #ffe4c5; }
+.hero-section { background: linear-gradient(145deg,#fffdfa 0%,#f8f5ed 47%,#eff7eb 100%); }
+.hero h1 span,.section-heading h2 span,.about-content h2 span,.page-hero h1 span { color:#1e7b37; }
+.hero-glow-left { background:#ffe0b7; }.hero-glow-right { background:#d5eed2; }
+.orbit-ring { border-color:#d9c59f; }.orbit-ring-two { border-color:#c6e1c2; }
+.orbit-core { background:linear-gradient(145deg,#e97820,#23783b); box-shadow:0 20px 50px #d76d274d; }.core-pulse { border-color:#e5c58d; }
+.float-card,.feature-card,.detail-card,.workflow-card,.principles-grid article,.app-form,.complaint-card,.profile-card,.officer-card,.stat-card,.admin-kpi-card,.breakdown-card,.admin-users-section { background:rgba(255,255,255,.66); border-color:rgba(35,101,46,.12); box-shadow:0 16px 34px rgba(44,74,43,.08); backdrop-filter:blur(18px) saturate(145%); }
+.float-card { border-color:rgba(237,139,54,.18); }.card-icon-blue,.card-icon-sky { color:#1d7433;background:#e5f4e3; }.card-icon-violet { color:#bd5911;background:#fff0dc; }
+.feature-icon,.dashboard-icon { color:#1d7433; background:#e7f4e6; }
+.feature-card:hover,.detail-card:hover { border-color:rgba(237,139,54,.45); box-shadow:0 22px 43px rgba(61,74,44,.13); }
+.about-section,.principles-section { background:linear-gradient(110deg,#fff2dd,#eff8eb); }.final-cta { background:linear-gradient(120deg,#155f2d,#1c7a36 58%,#d96a1e); }.cta-label { color:#ffdcaf; }
+.site-footer { background:rgba(255,255,255,.67); backdrop-filter:blur(18px); }
+.page-hero,.page-hero-works { background:linear-gradient(145deg,#fffdf9,#fff3df 45%,#e9f6e7); }.page-section,.public-page,.app-shell { background:transparent; }
+.auth-page { background:radial-gradient(circle at 14% 18%,#ffdfb9 0,transparent 25rem),radial-gradient(circle at 88% 82%,#d6efd4 0,transparent 25rem),#f4f6ee; }.auth-card { background:rgba(255,255,255,.66); border-color:rgba(255,255,255,.85); box-shadow:0 25px 60px rgba(54,74,43,.14); backdrop-filter:blur(24px) saturate(155%); }
+.auth-card input,.app-form input,.app-form select,.app-form textarea,.search-box input,.filter-group select,.role-select { background:rgba(255,255,255,.72); border-color:rgba(31,103,47,.17); }
+.auth-card input:focus,.app-form input:focus,.app-form select:focus,.app-form textarea:focus { border-color:#e67a26; box-shadow:0 0 0 3px #ffe5ca; }
+.auth-switch a { color:#1e7b37; }
+.app-links a:hover,.app-links a.active,.app-links button:hover { color:#1e7b37; background:#eaf6e8; }
+.dashboard-hero { background:linear-gradient(120deg,rgba(18,89,42,.97),rgba(30,123,55,.92) 56%,rgba(228,111,30,.92)); border:1px solid rgba(255,255,255,.34); box-shadow:0 20px 43px rgba(30,104,43,.24); backdrop-filter:blur(20px); }
+.dashboard-kicker { color:#ffdaac !important; text-transform:uppercase; font-size:10px; font-weight:800; letter-spacing:1.25px; margin-bottom:8px !important; }
+.status-pending { color:#9c4c0d; background:#fff0d5; }.status-in-progress { color:#a4500d; background:#fff3df; }.status-resolved { color:#176d30; background:#e6f6e6; }
+.empty-state { background:rgba(255,255,255,.56); border-color:#e5b877; backdrop-filter:blur(15px); }
+.profile-avatar { background:linear-gradient(145deg,#ec7f26,#1e7937); }
+.kpi-value.highlight,.bar-fill,.tab-btn.active { color:#1d7433; }.tab-btn.active { background:#1d7433; color:#fff; }.stat-progress { border-left-color:#e47b27; }.bar-fill { background:#1d7433; }.bar-fill.fill-sky,.bar-fill.fill-medium { background:#e47b27; }.role-officer { background:#e9f6e8; color:#176d30; }
+.officer-ai-strip { background:rgba(240,248,237,.74); border-color:rgba(31,103,47,.11); }.status-select-in-progress { color:#a4500d; background:#fff1dc; border-color:#ffd09e; }.priority-medium { color:#a4500d; background:#fff2df; border-color:#ffd09e; }
+@media (max-width: 800px) { .site-header { background:rgba(255,255,255,.84); }.nav-panel { background:rgba(255,255,255,.86); border-color:rgba(31,103,47,.13); backdrop-filter:blur(20px); } }

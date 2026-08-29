@@ -2,9 +2,11 @@ import { useContext } from 'react'
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { AuthContext } from '../context/authcontextvalue.jsx'
 
-export default function ProtectedRoute() {
-  const { isAuthenticated, isLoading } = useContext(AuthContext)
+export default function ProtectedRoute({ allowedRoles }) {
+  const { isAuthenticated, isLoading, user } = useContext(AuthContext)
   const location = useLocation()
   if (isLoading) return <main className="auth-loading" aria-live="polite">Restoring your session…</main>
-  return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace state={{ from: location }} />
+  if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: location }} />
+  if (allowedRoles && !allowedRoles.includes(user?.role)) return <Navigate to="/dashboard" replace state={{ from: location }} />
+  return <Outlet />
 }

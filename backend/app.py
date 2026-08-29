@@ -20,6 +20,11 @@ CORS(app)
 db.init_app(app)
 jwt = JWTManager(app)
 
+with app.app_context():
+    instance_path = os.path.join(os.path.dirname(__file__), "instance")
+    os.makedirs(instance_path, exist_ok=True)
+    db.create_all()
+
 app.register_blueprint(auth_bp, url_prefix="/api/auth")
 app.register_blueprint(complaint_bp, url_prefix="/api/complaints")
 app.register_blueprint(officer_bp, url_prefix="/api/officers")
@@ -40,7 +45,5 @@ def home():
 
 
 if __name__ == "__main__":
-    with app.app_context():
-        db.create_all()
-
-    app.run(debug=True)
+    port = int(os.getenv("PORT", 5001))
+    app.run(host="0.0.0.0", port=port, debug=True)

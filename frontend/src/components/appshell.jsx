@@ -1,6 +1,7 @@
 import { useContext, useState } from 'react'
-import { Link, NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import { AuthContext } from '../context/authcontextvalue.jsx'
+import Brand from './brand.jsx'
 
 export default function AppShell({ title, eyebrow, children }) {
   const { user, logout } = useContext(AuthContext)
@@ -27,10 +28,7 @@ export default function AppShell({ title, eyebrow, children }) {
     <div className="app-shell">
       <header className="app-header">
         <div className="container app-nav">
-          <Link className="brand" to="/dashboard">
-            <span className="brand-mark" aria-hidden="true"><span /></span>
-            <span>CivicPulse <em>AI</em></span>
-          </Link>
+          <Brand to="/dashboard" />
           <button className="menu-toggle app-menu-toggle" type="button" aria-label="Toggle app navigation" aria-expanded={open} onClick={() => setOpen(!open)}>
             <span /><span /><span />
           </button>

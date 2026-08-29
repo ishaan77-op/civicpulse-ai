@@ -1,6 +1,7 @@
 import { useContext, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AuthContext } from '../context/authcontextvalue.jsx'
+import Brand from './brand.jsx'
 
 const navigation = [
   { label: 'Home', to: '/' },
@@ -8,15 +9,6 @@ const navigation = [
   { label: 'How It Works', to: '/how-it-works' },
   { label: 'About', to: '/about' },
 ]
-
-function Brand() {
-  return (
-    <Link className="brand" to="/" aria-label="CivicPulse AI home">
-      <span className="brand-mark" aria-hidden="true"><span /></span>
-      <span>CivicPulse <em>AI</em></span>
-    </Link>
-  )
-}
 
 export default function Navbar() {
   const { user, isAuthenticated } = useContext(AuthContext) || {}

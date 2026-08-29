@@ -31,8 +31,12 @@ function App() {
           <Route path="/complaints" element={<Complaints />} />
           <Route path="/complaints/:id" element={<ComplaintDetails />} />
           <Route path="/profile" element={<Profile />} />
-          <Route path="/officer" element={<OfficerDashboard />} />
-          <Route path="/admin" element={<AdminDashboard />} />
+          <Route element={<ProtectedRoute allowedRoles={['Officer', 'Admin']} />}>
+            <Route path="/officer" element={<OfficerDashboard />} />
+          </Route>
+          <Route element={<ProtectedRoute allowedRoles={['Admin']} />}>
+            <Route path="/admin" element={<AdminDashboard />} />
+          </Route>
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>

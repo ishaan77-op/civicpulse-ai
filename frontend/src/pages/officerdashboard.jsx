@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import AppShell from '../components/appshell.jsx'
 import { apiErrorMessage } from '../services/api.js'
 import { getOfficerComplaints, getOfficerStats, updateComplaintStatus } from '../services/complaintservice.js'
@@ -13,9 +13,10 @@ export default function OfficerDashboard() {
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [actionError, setActionError] = useState('')
   const [updatingId, setUpdatingId] = useState(null)
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true)
       setError('')
@@ -35,19 +36,21 @@ export default function OfficerDashboard() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [statusFilter, categoryFilter])
 
   useEffect(() => {
-    fetchData()
-  }, [statusFilter, categoryFilter])
+    const timer = window.setTimeout(fetchData, 0)
+    return () => window.clearTimeout(timer)
+  }, [fetchData])
 
   const handleStatusChange = async (id, newStatus) => {
     try {
+      setActionError('')
       setUpdatingId(id)
       await updateComplaintStatus(id, newStatus)
       await fetchData()
     } catch (err) {
-      alert(apiErrorMessage(err, 'Failed to update complaint status.'))
+      setActionError(apiErrorMessage(err, 'Failed to update complaint status.'))
     } finally {
       setUpdatingId(null)
     }
@@ -115,6 +118,8 @@ export default function OfficerDashboard() {
           </select>
         </div>
       </section>
+
+      {actionError && <p className="form-message error" role="alert">{actionError}</p>}
 
       {loading ? (
         <p className="page-state">Loading complaints database...</p>
