@@ -18,12 +18,29 @@ export default function Report() {
   const [submitting, setSubmitting] = useState(false)
   const navigate = useNavigate()
 
+ HEAD
   const handleLocationSelect = (location) => {
     setForm((current) => ({
       ...current,
       location,
-    }))
+
+  const handleLocationSelect = (selection) => {
+  if (!selection) {
+    setForm((current) => ({ ...current, location: '' }))
+    return
   }
+
+  const { latitude, longitude, address, pincode } = selection
+  const coordinates = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`
+  const label = address
+    ? `${address}${pincode ? ` - ${pincode}` : ''} (${coordinates})`
+    : coordinates
+
+  setForm((current) => ({
+    ...current,
+    location: label,
+  }))
+}
 
   const locationConfirmed = Boolean(form.location?.confirmed)
 
