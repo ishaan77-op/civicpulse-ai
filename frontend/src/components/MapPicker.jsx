@@ -533,7 +533,7 @@ function MapPicker({
   }
 
   const searchLocation = async (event) => {
-    event.preventDefault()
+    event?.preventDefault()
 
     const query = searchQuery.trim()
 
@@ -614,8 +614,7 @@ function MapPicker({
       </div>
 
       {/* Search */}
-      <form
-        onSubmit={searchLocation}
+      <div
         style={{
           position: 'relative',
           display: 'flex',
@@ -647,6 +646,12 @@ function MapPicker({
               setTimeout(() => {
                 setShowSuggestions(false)
               }, 180)
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                searchLocation(event)
+              }
             }}
             placeholder="🔍 Search Nashik area, road or landmark..."
             autoComplete="off"
@@ -749,7 +754,8 @@ function MapPicker({
         </div>
 
         <button
-          type="submit"
+          type="button"
+          onClick={searchLocation}
           disabled={searching}
           style={{
             padding: '10px 16px',
@@ -763,7 +769,7 @@ function MapPicker({
         >
           {searching ? 'Searching...' : 'Search'}
         </button>
-      </form>
+      </div>
 
       {/* Current location */}
       <button
