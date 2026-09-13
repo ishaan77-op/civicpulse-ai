@@ -1,0 +1,2 @@
+import { Link } from 'react-router-dom'
+export default function Register() { return <main className="placeholder-page"><Link className="brand" to="/"><span className="brand-mark"><span /></span><span>CivicPulse <em>AI</em></span></Link><div><p className="section-label">Get started</p><h1>Join CivicPulse</h1><p>Registration will connect here as the platform is integrated.</p><Link className="button button-primary" to="/">Return home <span>→</span></Link></div></main> }
