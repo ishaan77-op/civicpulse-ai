@@ -47,6 +47,11 @@ class Complaint(db.Model):
         nullable=True
     )
 
+    image_filename = db.Column(
+        db.String(255),
+        nullable=True
+    )
+
     location = db.Column(
         db.String(255),
         nullable=False

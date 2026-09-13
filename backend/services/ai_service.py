@@ -1,18 +1,31 @@
 import os
 import json
+import mimetypes
 
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
+_backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(_backend_dir, ".env"))
 load_dotenv()
 
-api_key = os.getenv("GEMINI_API_KEY")
+def get_client():
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY not found in .env")
+    return genai.Client(api_key=api_key)
 
-if not api_key:
-    raise RuntimeError("GEMINI_API_KEY not found in .env")
 
-client = genai.Client(api_key=api_key)
+def _clean_json_text(text: str) -> str:
+    cleaned = text.strip()
+    if cleaned.startswith("```json"):
+        cleaned = cleaned[7:]
+    elif cleaned.startswith("```"):
+        cleaned = cleaned[3:]
+    if cleaned.endswith("```"):
+        cleaned = cleaned[:-3]
+    return cleaned.strip()
 
 
 def analyze_complaint(title, description, location, image_path=None):
@@ -23,7 +36,7 @@ def analyze_complaint(title, description, location, image_path=None):
     """
 
     prompt = f"""
-You are the AI intelligence engine for CivicPulse,
+You are the AI intelligence engine for CivicPulse / NMC-SmartFix,
 a municipal complaint management system.
 
 Analyze this citizen complaint.
@@ -78,27 +91,39 @@ Rules:
 
     contents = [prompt]
 
-    if image_path:
+    if image_path and os.path.exists(image_path):
+        mime_type, _ = mimetypes.guess_type(image_path)
+        if not mime_type:
+            mime_type = "image/jpeg"
+
         with open(image_path, "rb") as image_file:
             image_data = image_file.read()
 
         contents.append(
             types.Part.from_bytes(
                 data=image_data,
-                mime_type="image/jpeg"
+                mime_type=mime_type
             )
         )
 
-    response = client.models.generate_content(
-        model="gemini-3.6-flash",
-        contents=contents
+    client = get_client()
+    config = types.GenerateContentConfig(
+        response_mime_type="application/json",
+        temperature=0.2,
     )
 
-    text = response.text.strip()
+    response = client.models.generate_content(
+        model=os.getenv("GEMINI_MODEL", "gemini-3.6-flash"),
+        contents=contents,
+        config=config,
+    )
+
+    raw_text = response.text or ""
+    clean_text = _clean_json_text(raw_text)
 
     try:
-        return json.loads(text)
+        return json.loads(clean_text)
     except json.JSONDecodeError:
         raise ValueError(
-            f"AI returned invalid JSON:\n{text}"
+            f"AI returned invalid JSON:\n{raw_text}"
         )
