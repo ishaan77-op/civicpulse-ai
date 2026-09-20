@@ -59,7 +59,10 @@ Return ONLY valid JSON with exactly these fields:
     "priority": "",
     "department": "",
     "visual_observation": "",
-    "summary": ""
+    "summary": "",
+    "spam_flag": false,
+    "spam_reason": "",
+    "spam_confidence": ""
 }}
 
 Allowed categories:
@@ -77,6 +80,11 @@ Allowed priorities:
 - High
 - Critical
 
+Allowed spam_confidence values (only relevant when spam_flag is true):
+- Low
+- Medium
+- High
+
 Rules:
 
 1. Use the description and image together when an image is provided.
@@ -87,6 +95,18 @@ Rules:
 6. summary should be short and clear.
 7. Do not include markdown.
 8. Do not include explanations outside the JSON.
+9. spam_flag is a likely misreport/mismatch signal, separate from priority or category.
+   Set spam_flag to true ONLY when there is a clear mismatch between the image and the
+   claimed complaint, for example: the photo shows something completely unrelated to any
+   civic issue (a selfie, a random object, an unrelated scene), or the photo plainly
+   contradicts the title/description (e.g. description claims a flooded road but the
+   photo shows a dry, undamaged street).
+10. Do NOT set spam_flag to true for low image quality, bad lighting, an unusual angle,
+    a partially visible issue, or genuine ambiguity about severity - those are normal,
+    good-faith reports and must not be flagged.
+11. When spam_flag is true, spam_reason must briefly explain the mismatch in plain
+    language, and spam_confidence must reflect how certain you are.
+12. When spam_flag is false, set spam_reason to "" and spam_confidence to "".
 """
 
     contents = [prompt]

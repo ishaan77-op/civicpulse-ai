@@ -28,11 +28,13 @@ function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/map-test" element={<MapTest />} />
         <Route element={<ProtectedRoute />}>
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/report" element={<Report />} />
-          <Route path="/complaints" element={<Complaints />} />
-          <Route path="/complaints/:id" element={<ComplaintDetails />} />
           <Route path="/profile" element={<Profile />} />
+          <Route element={<ProtectedRoute allowedRoles={['Citizen']} />}>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/report" element={<Report />} />
+            <Route path="/complaints" element={<Complaints />} />
+            <Route path="/complaints/:id" element={<ComplaintDetails />} />
+          </Route>
           <Route element={<ProtectedRoute allowedRoles={['Officer', 'Admin']} />}>
             <Route path="/officer" element={<OfficerDashboard />} />
           </Route>

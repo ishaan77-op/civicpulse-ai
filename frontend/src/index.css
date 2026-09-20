@@ -63,6 +63,18 @@
 .tab-btn { padding: 10px 20px; border-radius: 10px; border: 1px solid transparent; background: transparent; font-weight: 700; font-size: 14px; color: #64748b; cursor: pointer; }
 .tab-btn.active { background: #2563eb; color: #fff; }
 
+.button-outline-danger { background: #fff; color: #b42318; border: 1px solid #fecdca; }
+.button-outline-danger:hover { background: #fef3f2; }
+.status-rejected { color: #b42318; background: #fef3f2; }
+.status-select-rejected { background: #fef3f2; color: #b42318; border-color: #fecdca; }
+
+.modal-overlay { position: fixed; inset: 0; background: #0f172acc; display: grid; place-items: center; z-index: 50; padding: 20px; }
+.modal-box { width: min(480px, 100%); max-height: 90vh; overflow-y: auto; }
+.radio-row { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; color: #334155; }
+.radio-row input { width: auto; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+.modal-actions .button { width: auto; }
+
 .admin-breakdown-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
 .breakdown-card { background: #fff; border: 1px solid #e1ebf6; border-radius: 18px; padding: 22px; }
 .breakdown-card h2 { font: 700 17px Manrope, sans-serif; margin: 0 0 16px; color: #0f172a; }
@@ -98,7 +110,7 @@ body { background: radial-gradient(circle at 8% 5%, #fff4df 0, transparent 23rem
 .site-header { backdrop-filter: blur(18px) saturate(145%); background: rgba(255,255,255,.54); border-bottom: 1px solid rgba(255,255,255,.75); }
 .app-header { background: rgba(255,255,255,.62); border-color: rgba(28,95,43,.11); backdrop-filter: blur(20px) saturate(150%); position: sticky; top: 0; z-index: 10; }
 .brand { color: #112e25; gap: 9px; }
-.brand-logo { width: 36px; height: 36px; object-fit: cover; object-position: 50% 19%; border-radius: 12px; border: 1px solid rgba(255,255,255,.84); box-shadow: 0 7px 15px rgba(19,71,39,.18); }
+.brand-logo { width: 36px; height: 36px; object-fit: cover; object-position: center; border-radius: 12px; border: 1px solid rgba(255,255,255,.84); box-shadow: 0 7px 15px rgba(19,71,39,.18); }
 .brand-name { letter-spacing: -1px; font-size: 17px; }
 .brand em { color: #1e7a34; }
 .brand-mark { background: linear-gradient(135deg,#ed7b24,#26743c); box-shadow: 0 7px 15px #ea7a2540; }
@@ -111,7 +123,8 @@ body { background: radial-gradient(circle at 8% 5%, #fff4df 0, transparent 23rem
 .eyebrow,.section-label { color:#bd5911; }
 .eyebrow { background:rgba(255,247,231,.76); border-color:rgba(237,139,54,.25); backdrop-filter:blur(10px); }
 .eyebrow-dot { background:#e87a23; box-shadow:0 0 0 4px #ffe4c5; }
-.hero-section { background: linear-gradient(145deg,#fffdfa 0%,#f8f5ed 47%,#eff7eb 100%); }
+.hero-section { background: url('../references/nashik-hero-bg.png') center center / cover no-repeat, linear-gradient(145deg,#fffdfa 0%,#f8f5ed 47%,#eff7eb 100%); }
+@media (max-width: 520px) { .hero-section { background: url('./assets/nashik-hero-bg-mobile.png') center center / cover no-repeat, linear-gradient(145deg,#fffdfa 0%,#f8f5ed 47%,#eff7eb 100%); } }
 .hero h1 span,.section-heading h2 span,.about-content h2 span,.page-hero h1 span { color:#1e7b37; }
 .hero-glow-left { background:#ffe0b7; }.hero-glow-right { background:#d5eed2; }
 .orbit-ring { border-color:#d9c59f; }.orbit-ring-two { border-color:#c6e1c2; }

@@ -5,6 +5,7 @@ from sqlalchemy import func
 from database.db import db
 from models.complaint import Complaint
 from models.user import User
+from utils.time_helper import to_iso8601
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -18,10 +19,19 @@ def get_analytics():
     if not user or user.role != "Admin":
         return jsonify({"message": "Admin access required"}), 403
 
-    total_complaints = Complaint.query.count()
-    pending = Complaint.query.filter_by(status="Pending").count()
-    in_progress = Complaint.query.filter_by(status="In Progress").count()
-    resolved = Complaint.query.filter_by(status="Resolved").count()
+    # Confirmed spam is moderation history, not a genuine civic complaint -
+    # excluded from every analytics figure below while the row itself (and
+    # its spam audit trail) is preserved. Same treatment for a complaint
+    # rejected as out-of-scope (a separate, non-spam moderation outcome).
+    active = Complaint.query.filter(
+        Complaint.spam_review_status != "Confirmed",
+        Complaint.rejection_status != "Rejected",
+    )
+
+    total_complaints = active.count()
+    pending = active.filter(Complaint.status == "Pending").count()
+    in_progress = active.filter(Complaint.status == "In Progress").count()
+    resolved = active.filter(Complaint.status == "Resolved").count()
 
     resolution_rate = round((resolved / total_complaints * 100), 1) if total_complaints > 0 else 0.0
 
@@ -30,22 +40,27 @@ def get_analytics():
     officer_count = User.query.filter_by(role="Officer").count()
     admin_count = User.query.filter_by(role="Admin").count()
 
+    active_filter = db.and_(
+        Complaint.spam_review_status != "Confirmed",
+        Complaint.rejection_status != "Rejected",
+    )
+
     # Category breakdown
     categories_raw = db.session.query(
         Complaint.category, func.count(Complaint.id)
-    ).group_by(Complaint.category).all()
+    ).filter(active_filter).group_by(Complaint.category).all()
     categories = {cat: count for cat, count in categories_raw}
 
     # Department breakdown
     depts_raw = db.session.query(
         Complaint.ai_department, func.count(Complaint.id)
-    ).group_by(Complaint.ai_department).all()
+    ).filter(active_filter).group_by(Complaint.ai_department).all()
     departments = {dept or "Unassigned": count for dept, count in depts_raw}
 
     # Priority breakdown
     priority_raw = db.session.query(
         Complaint.ai_priority, func.count(Complaint.id)
-    ).group_by(Complaint.ai_priority).all()
+    ).filter(active_filter).group_by(Complaint.ai_priority).all()
     priorities = {p or "Unclassified": count for p, count in priority_raw}
 
     return jsonify({
@@ -86,7 +101,9 @@ def get_users():
                 "name": u.name,
                 "email": u.email,
                 "role": u.role,
-                "created_at": u.created_at.isoformat() if u.created_at else None
+                "spam_count": u.spam_count,
+                "is_suspended": u.is_suspended,
+                "created_at": to_iso8601(u.created_at)
             }
             for u in users
         ]

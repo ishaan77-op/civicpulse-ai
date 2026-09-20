@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import AppShell from '../components/appshell.jsx'
 import { apiErrorMessage } from '../services/api.js'
 import { getComplaint, updateComplaint } from '../services/complaintservice.js'
+import { formatDateTime } from '../utils/formatDateTime.js'
 
 const categories = [
   'Road Infrastructure',
@@ -133,14 +134,45 @@ export default function ComplaintDetails() {
           </Link>
 
           <span
-            className={`status status-${String(
-              complaint.status || 'Pending'
-            )
-              .toLowerCase()
-              .replaceAll(' ', '-')}`}
+            className={`status ${
+              complaint?.rejection
+                ? 'status-rejected'
+                : `status-${String(complaint.status || 'Pending')
+                    .toLowerCase()
+                    .replaceAll(' ', '-')}`
+            }`}
           >
-            {complaint.status || 'Pending'}
+            {complaint?.rejection ? 'Rejected — Out of Scope' : complaint.status || 'Pending'}
           </span>
+
+          {complaint?.rejection && (
+            <p className="form-message error" role="status">
+              <strong>Rejected — Out of Scope</strong>
+              <br />
+              Reason: {complaint.rejection.reason}
+              {complaint.rejection.explanation ? ` — ${complaint.rejection.explanation}` : ''}
+              <br />
+              Reviewed by: Officer
+              <br />
+              Reviewed: {formatDateTime(complaint.rejection.reviewed_at)}
+            </p>
+          )}
+
+          {complaint?.civic_issue && (
+            <p className="form-message">
+              This report is grouped with a wider civic issue reported by{' '}
+              {complaint.civic_issue.report_count} citizen
+              {complaint.civic_issue.report_count === 1 ? '' : 's'}. Current
+              issue status:{' '}
+              <span
+                className={`status status-${String(complaint.civic_issue.status)
+                  .toLowerCase()
+                  .replaceAll(' ', '-')}`}
+              >
+                {complaint.civic_issue.status}
+              </span>
+            </p>
+          )}
 
           <h2>Keep report details current.</h2>
 

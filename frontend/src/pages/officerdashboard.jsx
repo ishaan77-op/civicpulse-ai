@@ -1,9 +1,20 @@
 import { useCallback, useEffect, useState } from 'react'
 import AppShell from '../components/appshell.jsx'
+import HeatmapView from '../components/HeatmapView.jsx'
+import SpamReviewList from '../components/SpamReviewList.jsx'
+import IssueClusterList from '../components/IssueClusterList.jsx'
+import RejectedComplaintsList from '../components/RejectedComplaintsList.jsx'
 import { apiErrorMessage } from '../services/api.js'
-import { getOfficerComplaints, getOfficerStats, updateComplaintStatus } from '../services/complaintservice.js'
+import { getHeatmapData, getOfficerComplaints, getOfficerStats, rejectComplaint, updateComplaintStatus } from '../services/complaintservice.js'
+import { formatDateTime as formatDate } from '../utils/formatDateTime.js'
 
-const formatDate = (value) => value ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : 'Date unavailable'
+const REJECTION_REASONS = [
+  'Private Property',
+  'Private Society / Apartment',
+  'Outside NMC Jurisdiction',
+  'Not a Municipal Responsibility',
+  'Other',
+]
 
 export default function OfficerDashboard() {
   const [complaints, setComplaints] = useState([])
@@ -15,6 +26,15 @@ export default function OfficerDashboard() {
   const [error, setError] = useState('')
   const [actionError, setActionError] = useState('')
   const [updatingId, setUpdatingId] = useState(null)
+  const [view, setView] = useState('list') // 'list' | 'heatmap' | 'spam' | 'issues'
+  const [heatmapPoints, setHeatmapPoints] = useState([])
+  const [heatmapLoading, setHeatmapLoading] = useState(false)
+  const [heatmapError, setHeatmapError] = useState('')
+  const [rejectModalId, setRejectModalId] = useState(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const [rejectExplanation, setRejectExplanation] = useState('')
+  const [rejectSubmitting, setRejectSubmitting] = useState(false)
+  const [rejectError, setRejectError] = useState('')
 
   const fetchData = useCallback(async () => {
     try {
@@ -43,6 +63,27 @@ export default function OfficerDashboard() {
     return () => window.clearTimeout(timer)
   }, [fetchData])
 
+  const fetchHeatmap = useCallback(async () => {
+    try {
+      setHeatmapLoading(true)
+      setHeatmapError('')
+      const { data } = await getHeatmapData({ status: 'Pending' })
+      const pending = data.points || []
+      const { data: inProgressData } = await getHeatmapData({ status: 'In Progress' })
+      setHeatmapPoints([...pending, ...(inProgressData.points || [])])
+    } catch (err) {
+      setHeatmapError(apiErrorMessage(err, 'Failed to load the heatmap.'))
+    } finally {
+      setHeatmapLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (view !== 'heatmap') return undefined
+    const timer = window.setTimeout(fetchHeatmap, 0)
+    return () => window.clearTimeout(timer)
+  }, [view, fetchHeatmap])
+
   const handleStatusChange = async (id, newStatus) => {
     try {
       setActionError('')
@@ -53,6 +94,41 @@ export default function OfficerDashboard() {
       setActionError(apiErrorMessage(err, 'Failed to update complaint status.'))
     } finally {
       setUpdatingId(null)
+    }
+  }
+
+  const openRejectModal = (id) => {
+    setRejectModalId(id)
+    setRejectReason('')
+    setRejectExplanation('')
+    setRejectError('')
+  }
+
+  const closeRejectModal = () => {
+    if (rejectSubmitting) return
+    setRejectModalId(null)
+  }
+
+  const submitRejection = async () => {
+    if (!rejectReason) {
+      setRejectError('Please select a reason.')
+      return
+    }
+    if (rejectReason === 'Other' && !rejectExplanation.trim()) {
+      setRejectError('Please provide a short explanation.')
+      return
+    }
+
+    try {
+      setRejectSubmitting(true)
+      setRejectError('')
+      await rejectComplaint(rejectModalId, rejectReason, rejectExplanation.trim())
+      setRejectModalId(null)
+      await fetchData()
+    } catch (err) {
+      setRejectError(apiErrorMessage(err, 'Failed to reject this complaint.'))
+    } finally {
+      setRejectSubmitting(false)
     }
   }
 
@@ -87,6 +163,61 @@ export default function OfficerDashboard() {
         </div>
       </section>
 
+      {/* View Toggle */}
+      <div className="admin-tabs">
+        <button
+          className={`tab-btn ${view === 'list' ? 'active' : ''}`}
+          onClick={() => setView('list')}
+        >
+          📋 List View
+        </button>
+        <button
+          className={`tab-btn ${view === 'heatmap' ? 'active' : ''}`}
+          onClick={() => setView('heatmap')}
+        >
+          🗺️ Damage Heatmap
+        </button>
+        <button
+          className={`tab-btn ${view === 'spam' ? 'active' : ''}`}
+          onClick={() => setView('spam')}
+        >
+          🚩 Spam Review
+        </button>
+        <button
+          className={`tab-btn ${view === 'issues' ? 'active' : ''}`}
+          onClick={() => setView('issues')}
+        >
+          🧩 Issue Clusters
+        </button>
+        <button
+          className={`tab-btn ${view === 'rejected' ? 'active' : ''}`}
+          onClick={() => setView('rejected')}
+        >
+          🚫 Out of Scope
+        </button>
+      </div>
+
+      {view === 'heatmap' ? (
+        <section>
+          <p className="dashboard-kicker">
+            Concentration of Pending &amp; In Progress issues, weighted by AI priority.
+          </p>
+          {heatmapLoading ? (
+            <p className="page-state">Loading heatmap...</p>
+          ) : heatmapError ? (
+            <p className="form-message error" role="alert">{heatmapError}</p>
+          ) : (
+            <HeatmapView points={heatmapPoints} />
+          )}
+        </section>
+      ) : view === 'spam' ? (
+        <SpamReviewList onDecision={() => { fetchData(); fetchHeatmap() }} />
+      ) : view === 'issues' ? (
+        <IssueClusterList />
+      ) : view === 'rejected' ? (
+        <RejectedComplaintsList onDecision={() => { fetchData(); fetchHeatmap() }} />
+      ) : (
+      <>
       {/* Control / Filter Bar */}
       <section className="officer-controls">
         <div className="search-box">
@@ -163,6 +294,13 @@ export default function OfficerDashboard() {
                     <option value="In Progress">🔵 In Progress</option>
                     <option value="Resolved">🟢 Resolved</option>
                   </select>
+                  <button
+                    type="button"
+                    className="button button-outline-danger"
+                    onClick={() => openRejectModal(item.id)}
+                  >
+                    Reject / Out of Scope
+                  </button>
                 </div>
               </div>
 
@@ -182,6 +320,60 @@ export default function OfficerDashboard() {
               )}
             </article>
           ))}
+        </div>
+      )}
+      </>
+      )}
+
+      {rejectModalId && (
+        <div className="modal-overlay" role="dialog" aria-modal="true">
+          <div className="modal-box app-form">
+            <h2>Reject / Out of Scope</h2>
+            <p>
+              Select why this complaint is outside NMC/government responsibility. This is not
+              spam - it will not affect the citizen's spam standing.
+            </p>
+
+            {REJECTION_REASONS.map((reason) => (
+              <label className="radio-row" key={reason}>
+                <input
+                  type="radio"
+                  name="rejection-reason"
+                  value={reason}
+                  checked={rejectReason === reason}
+                  onChange={() => setRejectReason(reason)}
+                />
+                {reason}
+              </label>
+            ))}
+
+            <label>
+              Additional explanation{rejectReason === 'Other' ? ' (required)' : ' (optional)'}
+              <textarea
+                rows="3"
+                value={rejectExplanation}
+                onChange={(e) => setRejectExplanation(e.target.value)}
+              />
+            </label>
+
+            {rejectError && (
+              <p className="form-message error" role="alert">{rejectError}</p>
+            )}
+
+            <div className="modal-actions">
+              <button type="button" className="button" onClick={closeRejectModal} disabled={rejectSubmitting}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="button button-primary"
+                onClick={submitRejection}
+                disabled={rejectSubmitting}
+              >
+                {rejectSubmitting ? 'Submitting…' : 'Confirm Rejection'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </AppShell>

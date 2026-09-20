@@ -1,16 +1,22 @@
 import { useCallback, useEffect, useState } from 'react'
 import AppShell from '../components/appshell.jsx'
+import HeatmapView from '../components/HeatmapView.jsx'
+import SpamReviewList from '../components/SpamReviewList.jsx'
+import IssueClusterList from '../components/IssueClusterList.jsx'
 import { apiErrorMessage } from '../services/api.js'
-import { getAdminAnalytics, getAdminUsers, updateUserRole } from '../services/complaintservice.js'
+import { getAdminAnalytics, getAdminUsers, getHeatmapData, updateUserRole } from '../services/complaintservice.js'
 
 export default function AdminDashboard() {
   const [analytics, setAnalytics] = useState(null)
   const [users, setUsers] = useState([])
-  const [activeTab, setActiveTab] = useState('analytics') // 'analytics' | 'users'
+  const [activeTab, setActiveTab] = useState('analytics') // 'analytics' | 'users' | 'heatmap' | 'spam' | 'issues'
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [actionError, setActionError] = useState('')
   const [roleUpdatingId, setRoleUpdatingId] = useState(null)
+  const [heatmapPoints, setHeatmapPoints] = useState([])
+  const [heatmapLoading, setHeatmapLoading] = useState(false)
+  const [heatmapError, setHeatmapError] = useState('')
 
   const fetchData = useCallback(async () => {
     try {
@@ -33,6 +39,25 @@ export default function AdminDashboard() {
     const timer = window.setTimeout(fetchData, 0)
     return () => window.clearTimeout(timer)
   }, [fetchData])
+
+  const fetchHeatmap = useCallback(async () => {
+    try {
+      setHeatmapLoading(true)
+      setHeatmapError('')
+      const { data } = await getHeatmapData()
+      setHeatmapPoints(data.points || [])
+    } catch (err) {
+      setHeatmapError(apiErrorMessage(err, 'Failed to load the heatmap.'))
+    } finally {
+      setHeatmapLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (activeTab !== 'heatmap') return undefined
+    const timer = window.setTimeout(fetchHeatmap, 0)
+    return () => window.clearTimeout(timer)
+  }, [activeTab, fetchHeatmap])
 
   const handleRoleChange = async (userId, newRole) => {
     try {
@@ -64,6 +89,24 @@ export default function AdminDashboard() {
           onClick={() => setActiveTab('users')}
         >
           👥 User Role Management ({users.length})
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'heatmap' ? 'active' : ''}`}
+          onClick={() => setActiveTab('heatmap')}
+        >
+          🗺️ Heatmap
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'spam' ? 'active' : ''}`}
+          onClick={() => setActiveTab('spam')}
+        >
+          🚩 Spam Review
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'issues' ? 'active' : ''}`}
+          onClick={() => setActiveTab('issues')}
+        >
+          🧩 Issue Clusters
         </button>
       </div>
 
@@ -177,6 +220,23 @@ export default function AdminDashboard() {
             </div>
           </section>
         </>
+      ) : activeTab === 'heatmap' ? (
+        <section>
+          <p className="dashboard-kicker">
+            City-wide concentration of all reported issues, weighted by AI priority.
+          </p>
+          {heatmapLoading ? (
+            <p className="page-state">Loading heatmap...</p>
+          ) : heatmapError ? (
+            <p className="form-message error" role="alert">{heatmapError}</p>
+          ) : (
+            <HeatmapView points={heatmapPoints} />
+          )}
+        </section>
+      ) : activeTab === 'spam' ? (
+        <SpamReviewList onDecision={() => { fetchData(); fetchHeatmap() }} />
+      ) : activeTab === 'issues' ? (
+        <IssueClusterList />
       ) : (
         /* User Management Section */
         <section className="admin-users-section">
@@ -190,6 +250,8 @@ export default function AdminDashboard() {
                   <th>User</th>
                   <th>Email</th>
                   <th>Current Role</th>
+                  <th>Spam Count</th>
+                  <th>Suspended</th>
                   <th>Action / Assign Role</th>
                 </tr>
               </thead>
@@ -205,6 +267,8 @@ export default function AdminDashboard() {
                         {u.role}
                       </span>
                     </td>
+                    <td>{u.spam_count ?? 0}/5</td>
+                    <td>{u.is_suspended ? '🚫 Suspended' : '—'}</td>
                     <td>
                       <select
                         value={u.role}

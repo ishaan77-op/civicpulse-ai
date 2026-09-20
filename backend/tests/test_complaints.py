@@ -1,9 +1,14 @@
+import io
 from unittest.mock import patch
 
 
 def get_token(client, email, password):
     res = client.post("/api/auth/login", json={"email": email, "password": password})
     return res.get_json()["token"]
+
+
+def fake_image():
+    return (io.BytesIO(b"fake-image-bytes"), "photo.jpg")
 
 
 @patch("routes.complaints.analyze_complaint")
@@ -24,14 +29,20 @@ def test_create_and_get_complaint(mock_ai, client, citizen_user):
         data={
             "title": "Pothole on Main St",
             "description": "Deep hole near intersection",
-            "location": "20.011, 73.790"
+            "latitude": "20.011",
+            "longitude": "73.790",
+            "address": "Main St, Nashik",
+            "image": fake_image()
         },
+        content_type="multipart/form-data",
         headers={"Authorization": f"Bearer {token}"}
     )
     assert create_res.status_code == 201
     complaint_data = create_res.get_json()["complaint"]
     assert complaint_data["title"] == "Pothole on Main St"
     assert complaint_data["category"] == "Road Infrastructure"
+    assert complaint_data["latitude"] == 20.011
+    assert complaint_data["longitude"] == 73.790
 
     # Get my complaints
     get_res = client.get(
@@ -43,6 +54,75 @@ def test_create_and_get_complaint(mock_ai, client, citizen_user):
     assert len(my_complaints) == 1
 
 
+def test_create_complaint_requires_image(client, citizen_user):
+    token = get_token(client, "citizen@example.com", "password123")
+
+    create_res = client.post(
+        "/api/complaints/",
+        data={
+            "title": "Pothole on Main St",
+            "description": "Deep hole near intersection",
+            "latitude": "20.011",
+            "longitude": "73.790",
+        },
+        content_type="multipart/form-data",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert create_res.status_code == 400
+
+
+def test_create_complaint_requires_location(client, citizen_user):
+    token = get_token(client, "citizen@example.com", "password123")
+
+    create_res = client.post(
+        "/api/complaints/",
+        data={
+            "title": "Pothole on Main St",
+            "description": "Deep hole near intersection",
+            "image": fake_image()
+        },
+        content_type="multipart/form-data",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert create_res.status_code == 400
+
+
+def test_officer_cannot_submit_a_complaint(client, officer_user):
+    officer_token = get_token(client, "officer@example.com", "officer123")
+
+    create_res = client.post(
+        "/api/complaints/",
+        data={
+            "title": "Pothole on Main St",
+            "description": "Deep hole near intersection",
+            "latitude": "20.011",
+            "longitude": "73.790",
+            "image": fake_image()
+        },
+        content_type="multipart/form-data",
+        headers={"Authorization": f"Bearer {officer_token}"}
+    )
+    assert create_res.status_code == 403
+
+
+def test_admin_cannot_submit_a_complaint(client, admin_user):
+    admin_token = get_token(client, "admin@example.com", "admin123")
+
+    create_res = client.post(
+        "/api/complaints/",
+        data={
+            "title": "Pothole on Main St",
+            "description": "Deep hole near intersection",
+            "latitude": "20.011",
+            "longitude": "73.790",
+            "image": fake_image()
+        },
+        content_type="multipart/form-data",
+        headers={"Authorization": f"Bearer {admin_token}"}
+    )
+    assert create_res.status_code == 403
+
+
 def test_officer_status_update_permission(client, citizen_user, officer_user):
     citizen_token = get_token(client, "citizen@example.com", "password123")
     officer_token = get_token(client, "officer@example.com", "officer123")
@@ -51,7 +131,14 @@ def test_officer_status_update_permission(client, citizen_user, officer_user):
         mock_ai.return_value = {"category": "Other", "priority": "Low", "department": "General", "visual_observation": "None", "summary": "Test"}
         create_res = client.post(
             "/api/complaints/",
-            data={"title": "Broken bench", "description": "Park bench", "location": "Park"},
+            data={
+                "title": "Broken bench",
+                "description": "Park bench",
+                "latitude": "20.0",
+                "longitude": "73.8",
+                "image": fake_image()
+            },
+            content_type="multipart/form-data",
             headers={"Authorization": f"Bearer {citizen_token}"}
         )
         complaint_id = create_res.get_json()["complaint"]["id"]

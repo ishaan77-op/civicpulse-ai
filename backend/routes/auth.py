@@ -4,6 +4,7 @@ from flask_jwt_extended import (
     jwt_required,
     get_jwt_identity
 )
+from sqlalchemy.exc import SQLAlchemyError
 
 from database.db import db
 from models.user import User
@@ -21,9 +22,13 @@ def register():
     data = request.get_json()
 
     name = data.get("name")
-    email = data.get("email")
+    email = (data.get("email") or "").strip().lower()
     password = data.get("password")
-    role = data.get("role", "Citizen")
+
+    # Self-registration always creates a Citizen account. Any client-supplied
+    # `role` is ignored - Officer/Admin roles are granted only via the
+    # authorized admin role-management endpoint.
+    role = "Citizen"
 
     if not name or not email or not password:
         return jsonify({
@@ -46,8 +51,14 @@ def register():
         role=role
     )
 
-    db.session.add(new_user)
-    db.session.commit()
+    try:
+        db.session.add(new_user)
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify({
+            "message": "Could not create your account. Please try again."
+        }), 500
 
     access_token = create_access_token(
         identity=str(new_user.id),
@@ -77,7 +88,7 @@ def login():
 
     data = request.get_json()
 
-    email = data.get("email")
+    email = (data.get("email") or "").strip().lower()
     password = data.get("password")
 
     if not email or not password:
@@ -96,6 +107,11 @@ def login():
         return jsonify({
             "message": "Invalid email or password"
         }), 401
+
+    if user.is_suspended:
+        return jsonify({
+            "message": "Your account has been suspended."
+        }), 403
 
     access_token = create_access_token(
         identity=str(user.id),
@@ -135,5 +151,7 @@ def profile():
         "id": user.id,
         "name": user.name,
         "email": user.email,
-        "role": user.role
+        "role": user.role,
+        "spam_count": user.spam_count,
+        "is_suspended": user.is_suspended
     }), 200

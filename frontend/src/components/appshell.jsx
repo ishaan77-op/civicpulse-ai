@@ -1,7 +1,32 @@
 import { useContext, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { AuthContext } from '../context/authcontextvalue.jsx'
+import { homeRouteForRole } from '../utils/roleHome.js'
+import NotificationBanner from './NotificationBanner.jsx'
 import Brand from './brand.jsx'
+
+// Role-aware navigation - an Officer/Admin must never see citizen-only
+// actions like "Report an issue" or "My complaints" in their own nav.
+function linksForRole(role) {
+  if (role === 'Officer') {
+    return [
+      { to: '/officer', label: 'Officer Hub' },
+    ]
+  }
+
+  if (role === 'Admin') {
+    return [
+      { to: '/admin', label: 'Admin Intelligence' },
+      { to: '/officer', label: 'Officer Hub' },
+    ]
+  }
+
+  return [
+    { to: '/dashboard', label: 'Dashboard' },
+    { to: '/report', label: 'Report an issue' },
+    { to: '/complaints', label: 'My complaints' },
+  ]
+}
 
 export default function AppShell({ title, eyebrow, children }) {
   const { user, logout } = useContext(AuthContext)
@@ -9,26 +34,13 @@ export default function AppShell({ title, eyebrow, children }) {
   const navigate = useNavigate()
   const signOut = () => { logout(); navigate('/', { replace: true }) }
 
-  const links = [
-    { to: '/dashboard', label: 'Dashboard' },
-    { to: '/report', label: 'Report an issue' },
-    { to: '/complaints', label: 'My complaints' },
-  ]
-
-  if (user?.role === 'Officer' || user?.role === 'Admin') {
-    links.push({ to: '/officer', label: 'Officer Hub' })
-  }
-  if (user?.role === 'Admin') {
-    links.push({ to: '/admin', label: 'Admin Intelligence' })
-  }
-
-  links.push({ to: '/profile', label: 'Profile' })
+  const links = [...linksForRole(user?.role), { to: '/profile', label: 'Profile' }]
 
   return (
     <div className="app-shell">
       <header className="app-header">
         <div className="container app-nav">
-          <Brand to="/dashboard" />
+          <Brand to={homeRouteForRole(user?.role)} />
           <button className="menu-toggle app-menu-toggle" type="button" aria-label="Toggle app navigation" aria-expanded={open} onClick={() => setOpen(!open)}>
             <span /><span /><span />
           </button>
@@ -51,6 +63,7 @@ export default function AppShell({ title, eyebrow, children }) {
               {user && <p>Welcome back, {user.name} ({user.role || 'Citizen'}).</p>}
             </div>
           </div>
+          {user?.role === 'Citizen' && <NotificationBanner />}
           {children}
         </div>
       </main>

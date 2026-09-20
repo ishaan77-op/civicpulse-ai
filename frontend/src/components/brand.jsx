@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import logo from '../assets/nmc-smartfix-logo.jpeg'
+import logo from '../assets/nmc-smartfix-mark.png'
 
 export default function Brand({ to = '/', className = '', compact = false }) {
   return (

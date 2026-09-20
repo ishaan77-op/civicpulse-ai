@@ -8,7 +8,6 @@ export default function Home() {
       <Navbar />
       <main>
         <section className="hero-section">
-          <div className="hero-glow hero-glow-left" /><div className="hero-glow hero-glow-right" />
           <div className="container hero">
             <div className="eyebrow"><span className="eyebrow-dot" />Nashik Municipal Corporation</div>
             <h1>Smart Nashik.<br /><span>Better</span> tomorrow.</h1>

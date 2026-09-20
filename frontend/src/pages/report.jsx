@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AppShell from '../components/appshell.jsx'
 import MapPicker from '../components/MapPicker.jsx'
+import CameraCapture from '../components/CameraCapture.jsx'
 import { apiErrorMessage } from '../services/api.js'
 import { createComplaint } from '../services/complaintservice.js'
 
@@ -9,7 +10,7 @@ export default function Report() {
   const [form, setForm] = useState({
     title: '',
     description: '',
-    location: '',
+    location: null,
     image: null,
   })
 
@@ -17,19 +18,28 @@ export default function Report() {
   const [submitting, setSubmitting] = useState(false)
   const navigate = useNavigate()
 
-  const handleLocationSelect = ({ latitude, longitude }) => {
+  const handleLocationSelect = (location) => {
     setForm((current) => ({
       ...current,
-      location: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+      location,
     }))
   }
+
+  const locationConfirmed = Boolean(form.location?.confirmed)
 
   const submit = async (event) => {
     event.preventDefault()
     setError('')
 
-    if (!form.location) {
-      setError('Please select your complaint location on the map.')
+    if (!locationConfirmed) {
+      setError(
+        'Please select your complaint location on the map and press "Confirm Location".',
+      )
+      return
+    }
+
+    if (!form.image) {
+      setError('Please capture a photo of the issue with your camera.')
       return
     }
 
@@ -40,11 +50,12 @@ export default function Report() {
 
       payload.append('title', form.title)
       payload.append('description', form.description)
-      payload.append('location', form.location)
-
-      if (form.image) {
-        payload.append('image', form.image)
+      payload.append('latitude', form.location.latitude)
+      payload.append('longitude', form.location.longitude)
+      if (form.location.address) {
+        payload.append('address', form.location.address)
       }
+      payload.append('image', form.image)
 
       await createComplaint(payload)
 
@@ -107,26 +118,21 @@ export default function Report() {
             onLocationSelect={handleLocationSelect}
           />
 
-          <label>
-            Selected location
-            <input
-              value={form.location}
-              readOnly
-              placeholder="Use the map to select your location"
-              required
-            />
-          </label>
+          {!locationConfirmed && (
+            <p className="form-message">
+              Select a point on the map, then press "Confirm Location"
+              before submitting.
+            </p>
+          )}
 
           <label>
-            Photo of the issue
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(event) =>
-                setForm({
-                  ...form,
-                  image: event.target.files[0] || null,
-                })
+            Photo of the issue (camera only)
+            <CameraCapture
+              onCapture={(file) =>
+                setForm((current) => ({
+                  ...current,
+                  image: file,
+                }))
               }
             />
           </label>
@@ -139,7 +145,7 @@ export default function Report() {
 
           <button
             className="button button-primary"
-            disabled={submitting}
+            disabled={submitting || !locationConfirmed || !form.image}
           >
             {submitting ? 'Submitting…' : 'Submit report'}
             <span aria-hidden="true">→</span>
