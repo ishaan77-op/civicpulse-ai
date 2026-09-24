@@ -18,29 +18,20 @@ export default function Report() {
   const [submitting, setSubmitting] = useState(false)
   const navigate = useNavigate()
 
- HEAD
-  const handleLocationSelect = (location) => {
+  const handleLocationSelect = (selection) => {
+    if (!selection) {
+      setForm((current) => ({
+        ...current,
+        location: null,
+      }))
+      return
+    }
+
     setForm((current) => ({
       ...current,
-      location,
-
-  const handleLocationSelect = (selection) => {
-  if (!selection) {
-    setForm((current) => ({ ...current, location: '' }))
-    return
+      location: selection,
+    }))
   }
-
-  const { latitude, longitude, address, pincode } = selection
-  const coordinates = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`
-  const label = address
-    ? `${address}${pincode ? ` - ${pincode}` : ''} (${coordinates})`
-    : coordinates
-
-  setForm((current) => ({
-    ...current,
-    location: label,
-  }))
-}
 
   const locationConfirmed = Boolean(form.location?.confirmed)
 
@@ -69,9 +60,11 @@ export default function Report() {
       payload.append('description', form.description)
       payload.append('latitude', form.location.latitude)
       payload.append('longitude', form.location.longitude)
+
       if (form.location.address) {
         payload.append('address', form.location.address)
       }
+
       payload.append('image', form.image)
 
       await createComplaint(payload)
@@ -81,8 +74,8 @@ export default function Report() {
       setError(
         apiErrorMessage(
           requestError,
-          'We could not submit this report.'
-        )
+          'We could not submit this report.',
+        ),
       )
     } finally {
       setSubmitting(false)
@@ -107,10 +100,10 @@ export default function Report() {
             <input
               value={form.title}
               onChange={(event) =>
-                setForm({
-                  ...form,
+                setForm((current) => ({
+                  ...current,
                   title: event.target.value,
-                })
+                }))
               }
               required
             />
@@ -122,18 +115,16 @@ export default function Report() {
               rows="6"
               value={form.description}
               onChange={(event) =>
-                setForm({
-                  ...form,
+                setForm((current) => ({
+                  ...current,
                   description: event.target.value,
-                })
+                }))
               }
               required
             />
           </label>
 
-          <MapPicker
-            onLocationSelect={handleLocationSelect}
-          />
+          <MapPicker onLocationSelect={handleLocationSelect} />
 
           {!locationConfirmed && (
             <p className="form-message">

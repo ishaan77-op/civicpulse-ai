@@ -24,13 +24,10 @@ def register():
     name = data.get("name")
     email = (data.get("email") or "").strip().lower()
     password = data.get("password")
-<<<<<<< HEAD
 
     # Self-registration always creates a Citizen account. Any client-supplied
     # `role` is ignored - Officer/Admin roles are granted only via the
     # authorized admin role-management endpoint.
-=======
->>>>>>> d125fcf (Harden backend configuration and registration)
     role = "Citizen"
 
     if not name or not email or not password:
