@@ -5,7 +5,6 @@ import HowItWorks from './pages/how-it-works.jsx'
 import About from './pages/about.jsx'
 import Login from './pages/login.jsx'
 import Register from './pages/register.jsx'
-import MapTest from './pages/maptest.jsx'
 import ProtectedRoute from './components/protectedroute.jsx'
 import Dashboard from './pages/citizendashboard.jsx'
 import Report from './pages/report.jsx'
@@ -26,7 +25,6 @@ function App() {
         <Route path="/about" element={<About />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/map-test" element={<MapTest />} />
         <Route element={<ProtectedRoute />}>
           <Route path="/profile" element={<Profile />} />
           <Route element={<ProtectedRoute allowedRoles={['Citizen']} />}>
