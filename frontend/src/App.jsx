@@ -14,6 +14,8 @@ import Profile from './pages/profile.jsx'
 import OfficerDashboard from './pages/officerdashboard.jsx'
 import AdminDashboard from './pages/admindashboard.jsx'
 import NotFound from './pages/notfound.jsx'
+import Community from './pages/community.jsx'
+import CommunityIssue from './pages/communityissue.jsx'
 
 function App() {
   return (
@@ -27,6 +29,8 @@ function App() {
         <Route path="/register" element={<Register />} />
         <Route element={<ProtectedRoute />}>
           <Route path="/profile" element={<Profile />} />
+          <Route path="/community" element={<Community />} />
+          <Route path="/community/issues/:id" element={<CommunityIssue />} />
           <Route element={<ProtectedRoute allowedRoles={['Citizen']} />}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/report" element={<Report />} />

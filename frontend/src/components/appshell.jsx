@@ -11,6 +11,7 @@ function linksForRole(role) {
   if (role === 'Officer') {
     return [
       { to: '/officer', label: 'Officer Hub' },
+      { to: '/community', label: 'Community' },
     ]
   }
 
@@ -18,6 +19,7 @@ function linksForRole(role) {
     return [
       { to: '/admin', label: 'Admin Intelligence' },
       { to: '/officer', label: 'Officer Hub' },
+      { to: '/community', label: 'Community' },
     ]
   }
 
@@ -25,6 +27,7 @@ function linksForRole(role) {
     { to: '/dashboard', label: 'Dashboard' },
     { to: '/report', label: 'Report an issue' },
     { to: '/complaints', label: 'My complaints' },
+    { to: '/community', label: 'Community' },
   ]
 }
 

@@ -3,6 +3,8 @@ import AppShell from '../components/appshell.jsx'
 import HeatmapView from '../components/HeatmapView.jsx'
 import SpamReviewList from '../components/SpamReviewList.jsx'
 import IssueClusterList from '../components/IssueClusterList.jsx'
+import CommunityAnalytics from '../components/CommunityAnalytics.jsx'
+import CommunityModerationList from '../components/CommunityModerationList.jsx'
 import { apiErrorMessage } from '../services/api.js'
 import { getAdminAnalytics, getAdminUsers, getHeatmapData, updateUserRole } from '../services/complaintservice.js'
 
@@ -107,6 +109,18 @@ export default function AdminDashboard() {
           onClick={() => setActiveTab('issues')}
         >
           🧩 Issue Clusters
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'community' ? 'active' : ''}`}
+          onClick={() => setActiveTab('community')}
+        >
+          🏙️ Community Intelligence
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'moderation' ? 'active' : ''}`}
+          onClick={() => setActiveTab('moderation')}
+        >
+          💬 Community Moderation
         </button>
       </div>
 
@@ -237,6 +251,10 @@ export default function AdminDashboard() {
         <SpamReviewList onDecision={() => { fetchData(); fetchHeatmap() }} />
       ) : activeTab === 'issues' ? (
         <IssueClusterList />
+      ) : activeTab === 'community' ? (
+        <CommunityAnalytics />
+      ) : activeTab === 'moderation' ? (
+        <CommunityModerationList />
       ) : (
         /* User Management Section */
         <section className="admin-users-section">

@@ -5,8 +5,11 @@ from database.db import db
 from models.civic_issue import CivicIssue
 from models.complaint import Complaint
 from models.notification import Notification
+from models.community import CivicIssueStatusChange
 from models.user import User
 from routes.complaints import serialize_complaint
+from services import community_service as community
+from services import impact_score_service as impact
 from utils.time_helper import to_iso8601, utc_now
 
 officer_bp = Blueprint("officer", __name__)
@@ -244,6 +247,14 @@ def review_spam_report(complaint_id):
             spam_count_at_time=reported_user.spam_count
         ))
 
+    # Level 2 Community Impact: only a human decision ever moves the score -
+    # a Confirmed decision applies the spam penalty, a Rejected decision
+    # (the AI flag was wrong) makes the report count as genuine.
+    if decision == "Confirmed":
+        impact.on_spam_confirmed(complaint, user.id)
+    else:
+        impact.on_complaint_validated(complaint)
+
     db.session.commit()
 
     return jsonify({
@@ -293,6 +304,8 @@ def reopen_spam_review(complaint_id):
 
         if complaint.issue:
             complaint.issue.report_count += 1
+
+    impact.on_spam_decision_reopened(complaint, was_confirmed, user.id)
 
     complaint.spam_review_status = "Pending"
     complaint.spam_reopened_by = user.id
@@ -360,9 +373,27 @@ def get_issues():
 
     issues = query.all()
 
+    # Level 2: advisory community signal alongside each operational issue,
+    # aggregated in a few grouped queries rather than per issue.
+    issue_ids = [i.id for i in issues]
+    supports = community.support_counts(issue_ids)
+    verifications = community.verification_counts(issue_ids)
+    comments = community.comment_counts(issue_ids)
+    disputed = community.disputed_issue_ids(issues)
+
+    def with_community(issue):
+        data = serialize_issue(issue)
+        data["community"] = {
+            "supporters": supports.get(issue.id, 0),
+            "verification": dict(verifications[issue.id]),
+            "comments": comments.get(issue.id, 0),
+            "disputed": issue.id in disputed,
+        }
+        return data
+
     return jsonify({
         "total": len(issues),
-        "issues": [serialize_issue(i) for i in issues]
+        "issues": [with_community(i) for i in issues]
     }), 200
 
 
@@ -419,7 +450,24 @@ def update_issue_status(issue_id):
     # individual complaint history/status is preserved as-is. Citizens see
     # this issue's status via their complaint's `civic_issue` field
     # instead.
+    old_status = issue.status
     issue.status = new_status
+
+    # Level 2: record official status history (the community timeline shows
+    # only real events), reward the citizens whose reports led to a
+    # resolution, and notify affected reporters/supporters - once per
+    # actual change, never for a no-op re-save of the same status.
+    if old_status != new_status:
+        db.session.add(CivicIssueStatusChange(
+            civic_issue_id=issue.id,
+            old_status=old_status,
+            new_status=new_status,
+            changed_by=user.id,
+        ))
+        if new_status == "Resolved":
+            impact.on_issue_resolved(issue)
+        community.notify_issue_status_changed(issue, new_status)
+
     db.session.commit()
 
     return jsonify({

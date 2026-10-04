@@ -4,6 +4,7 @@ import HeatmapView from '../components/HeatmapView.jsx'
 import SpamReviewList from '../components/SpamReviewList.jsx'
 import IssueClusterList from '../components/IssueClusterList.jsx'
 import RejectedComplaintsList from '../components/RejectedComplaintsList.jsx'
+import CommunityModerationList from '../components/CommunityModerationList.jsx'
 import { apiErrorMessage } from '../services/api.js'
 import { getHeatmapData, getOfficerComplaints, getOfficerStats, rejectComplaint, updateComplaintStatus } from '../services/complaintservice.js'
 import { formatDateTime as formatDate } from '../utils/formatDateTime.js'
@@ -195,6 +196,12 @@ export default function OfficerDashboard() {
         >
           🚫 Out of Scope
         </button>
+        <button
+          className={`tab-btn ${view === 'moderation' ? 'active' : ''}`}
+          onClick={() => setView('moderation')}
+        >
+          💬 Community Moderation
+        </button>
       </div>
 
       {view === 'heatmap' ? (
@@ -216,6 +223,8 @@ export default function OfficerDashboard() {
         <IssueClusterList />
       ) : view === 'rejected' ? (
         <RejectedComplaintsList onDecision={() => { fetchData(); fetchHeatmap() }} />
+      ) : view === 'moderation' ? (
+        <CommunityModerationList />
       ) : (
       <>
       {/* Control / Filter Bar */}

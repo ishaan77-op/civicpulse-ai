@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiErrorMessage } from '../services/api.js'
 import { getIssues, updateIssueStatus } from '../services/complaintservice.js'
+import { Link } from 'react-router-dom'
 import { formatDateTime as formatDate } from '../utils/formatDateTime.js'
 
 function IssueClusterList() {
@@ -104,6 +105,22 @@ function IssueClusterList() {
 
               {issue.ai_summary && (
                 <p className="officer-card-desc">{issue.ai_summary}</p>
+              )}
+
+              {/* Level 2: advisory community signal - never an official status. */}
+              {issue.community && (
+                <div className="officer-ai-strip community-intel-strip">
+                  <div><strong>Community support:</strong> {issue.community.supporters}</div>
+                  <div>
+                    <strong>Verification:</strong> {issue.community.verification.still_exists} still present &bull;{' '}
+                    {issue.community.verification.resolved} resolved &bull; {issue.community.verification.not_sure} not sure
+                  </div>
+                  <div><strong>Comments:</strong> {issue.community.comments}</div>
+                  {issue.community.disputed && (
+                    <div className="community-disputed">⚠ Citizens report this is still present after resolution</div>
+                  )}
+                  <Link className="text-link" to={`/community/issues/${issue.id}`}>Open community thread →</Link>
+                </div>
               )}
             </article>
           ))}

@@ -13,15 +13,15 @@
 
 ## About
 
-NMC-SmartFix is a civic-tech platform built for Nashik Municipal Corporation (NMC): citizens submit issues such as potholes, garbage overflow, water supply problems, faulty streetlights, or drainage blockages — with a title, description, a camera photo, and a location picked on an interactive map. A Gemini-powered AI service reads the text and photo together and returns a structured analysis (category, priority, responsible department, a short visual observation, and a summary, plus a spam/mismatch signal), which is attached to the complaint automatically. Complaints are also auto-clustered into shared "civic issues" so duplicate reports of the same pothole don't create separate work items. Municipal officers work a triaged queue (filter, update status, review spam, reject out-of-scope reports), and admins get a platform-wide dashboard with resolution rates and category/department/priority breakdowns.
+NMC-SmartFix is a civic-tech platform built for Nashik Municipal Corporation (NMC): citizens submit issues such as potholes, garbage overflow, water supply problems, faulty streetlights, or drainage blockages — with a title, description, a camera photo, and a location picked on an interactive map. A Gemini-powered AI service reads the text and photo together and returns a structured analysis (category, priority, responsible department, a short visual observation, and a summary, plus a spam/mismatch signal), which is attached to the complaint automatically. Complaints are also auto-clustered into shared "civic issues" so duplicate reports of the same pothole don't create separate work items. Citizens can additionally support, verify, and comment on public civic issues, and track a personal Community Impact Score. Municipal officers work a triaged queue (filter, update status, review spam, reject out-of-scope reports, moderate community comments), and admins get a platform-wide dashboard with resolution rates, category/department/priority breakdowns, and community engagement analytics.
 
 The pilot location baked into the map component is **Nashik, India**.
 
 ## Project status
 
-The full application — Flask API, Gemini AI analysis, JWT auth, role-based dashboards, the Leaflet map picker — lives on the **`level1-integration`** branch (this branch, `level1-integration-work`, is the active integration/verification branch built on top of it). **`main` is still the original Vite + React scaffold and does not contain a `backend/` directory yet.** Use `level1-integration` (or a branch based on it) to run the real application described below.
+The full application — Flask API, Gemini AI analysis, JWT auth, role-based dashboards, the Leaflet map picker, and the community engagement layer — lives on the **`level1-integration`** branch (this branch, `level1-integration-work`, is the active integration/verification branch built on top of it, merged with the community/maps/notifications/moderation features from `ai-engine`). **`main` is still the original Vite + React scaffold and does not contain a `backend/` directory yet.** Use `level1-integration` (or a branch based on it) to run the real application described below.
 
-This is Level 1 of the project: a reliably working end-to-end civic-complaint flow for citizens, officers, and admins. Heatmaps, RAG, Redis, custom-trained AI, async processing, and containerization are intentionally out of scope for now.
+This is Level 1 of the project (core complaint flow) plus an initial Level 2 slice (community engagement: support, verification, comments, impact scoring, moderation). Heatmap polish, RAG, Redis, custom-trained AI, async processing, and containerization are intentionally out of scope for now.
 
 ## Key features
 
@@ -30,6 +30,8 @@ This is Level 1 of the project: a reliably working end-to-end civic-complaint fl
 - Submit a complaint with title, description, a **live camera photo** (no file-upload fallback — see note below), and a location picked/searched on an interactive Nashik map
 - View AI-generated category, priority, department, visual observation, and summary for each submitted complaint
 - Track status (`Pending` → `In Progress` → `Resolved`, or `Rejected` if out of scope)
+- Browse the community feed of public civic issues (recent / trending / nearby / priority), support or verify an issue, and comment on it
+- Track a personal Community Impact Score and recent activity
 
 **AI engine** (`backend/services/ai_service.py`)
 - Sends each complaint's text and photo to Google Gemini in one call
@@ -41,11 +43,13 @@ This is Level 1 of the project: a reliably working end-to-end civic-complaint fl
 - Update a complaint's status, reject it as out-of-scope (with reason), or reopen a rejected/spam decision
 - Spam/misreport review queue and issue-cluster view (multiple complaints grouped into one civic issue)
 - Quick stats (total / pending / in progress / resolved) and a damage heatmap tab
+- Per-issue community intelligence (support/verification/comment signal) and a comment moderation queue (flagged/removed/visible, remove or restore)
 
 **Admin**
 - Platform-wide analytics: totals, resolution rate, and breakdowns by category, department, and priority
 - User list and role management (promote/demote Citizen / Officer / Admin), including suspending spam-flagged users
 - Same spam review, issue-cluster, and heatmap views as Officer
+- Community analytics: supports, verifications, comments, impact-score averages, community-confirmed-unresolved and disputed-resolution counts, engagement by category
 
 > **Note on the camera-only photo requirement:** `CameraCapture.jsx` calls `getUserMedia` directly with no `<input type="file">` fallback — a report cannot be submitted without live camera access. This looks intentional (it stops citizens from uploading old/reused/stock photos), but it also means the app cannot be used on a device/browser that denies or lacks camera access. Worth confirming this is the desired behavior before a demo.
 
@@ -57,13 +61,14 @@ This is Level 1 of the project: a reliably working end-to-end civic-complaint fl
 - Tailwind CSS v4
 - Axios for API calls
 - React-Leaflet + Leaflet (+ `leaflet.heat` for the heatmap tab, `leaflet-control-geocoder` for address search) for the map/location picker
+- Camera capture via the browser `MediaDevices` API (no file-upload fallback by design — see note above)
 
 **Backend** — `backend/`
 - Flask 3 + Flask-CORS
-- Flask-SQLAlchemy (SQLite by default) for User, Complaint, CivicIssue, and Notification models
+- Flask-SQLAlchemy (SQLite by default) for User, Complaint, CivicIssue, Notification, and community models (support, verification, comment, impact-score event)
 - Flask-JWT-Extended for authentication, bcrypt for password hashing
 - `google-genai` (Gemini) for AI complaint analysis
-- pytest test suite (`backend/tests/`) — 62 tests as of this writing, all passing
+- pytest test suite (`backend/tests/`), including dedicated community-feature tests
 
 ## Repository structure
 
@@ -72,28 +77,30 @@ civicpulse-ai/
 ├── frontend/
 │   ├── src/
 │   │   ├── assets/
-│   │   ├── components/       # appshell, navbar, footer, brand, protectedroute,
-│   │   │                      # MapPicker, CameraCapture, HeatmapView,
-│   │   │                      # SpamReviewList, IssueClusterList, RejectedComplaintsList,
-│   │   │                      # NotificationBanner
-│   │   ├── config/            # api.js, routes.js
-│   │   ├── context/           # authcontext.jsx, authcontextvalue.jsx
+│   │   ├── components/        # appshell, navbar, footer, brand, protectedroute,
+│   │   │                        # MapPicker, CameraCapture, HeatmapView,
+│   │   │                        # SpamReviewList, IssueClusterList, RejectedComplaintsList,
+│   │   │                        # NotificationBanner, Community* (analytics, comments, issue card, moderation list), ImpactPanel
+│   │   ├── config/             # api.js, routes.js
+│   │   ├── context/            # authcontext.jsx, authcontextvalue.jsx
 │   │   ├── pages/              # home, about, features, how-it-works, login, register,
 │   │   │                        # citizendashboard, report, complaints, complaintdetails,
-│   │   │                        # profile, officerdashboard, admindashboard, notfound
-│   │   ├── services/           # api.js, authservice.js, complaintservice.js, notificationservice.js
-│   │   └── utils/               # constants.js, formatDateTime.js, helper.js, roleHome.js
+│   │   │                        # profile, officerdashboard, admindashboard, notfound,
+│   │   │                        # community, communityissue
+│   │   ├── services/           # api.js, authservice.js, complaintservice.js, notificationservice.js, communityservice.js
+│   │   └── utils/               # constants.js, formatDateTime.js, helper.js, roleHome.js, community.js
 │   └── package.json
 └── backend/
     ├── app.py
     ├── config.py
     ├── seed.py                  # seeds demo Citizen/Officer/Admin accounts
     ├── database/db.py
-    ├── models/                  # user.py, complaint.py, civic_issue.py, notification.py
-    ├── routes/                  # auth.py, complaints.py, officers.py, admin.py, notifications.py
-    ├── services/                # ai_service.py, auth_service.py, complaint_service.py, issue_clustering.py
+    ├── models/                  # user.py, complaint.py, civic_issue.py, notification.py, community.py
+    ├── routes/                  # auth.py, complaints.py, officers.py, admin.py, notifications.py, community.py
+    ├── services/                # ai_service.py, auth_service.py, complaint_service.py, issue_clustering.py,
+    │                             # community_service.py, community_identity.py, impact_score_service.py
     ├── utils/                   # jwt_helper.py, time_helper.py, validators.py
-    └── tests/                   # pytest suite
+    └── tests/                   # pytest suite (includes test_community.py)
 ```
 
 ## Getting started
@@ -103,7 +110,24 @@ civicpulse-ai/
 - Python 3.10+
 - A Google Gemini API key (for AI-powered complaint analysis)
 
-### Backend
+### Quick start (Windows)
+
+```bat
+setup.bat    :: once per machine: venv, pip/npm installs, backend\.env, demo users
+start.bat    :: every time: starts backend + frontend and opens the browser
+```
+
+`setup.bat` seeds these demo accounts:
+
+| Role | Email | Password |
+|---|---|---|
+| Citizen | citizen@example.com | password123 |
+| Officer | officer@example.com | officer123 |
+| Admin | admin@example.com | admin123 |
+
+Keep the project outside OneDrive/Dropbox-synced folders — sync conflicts silently replace files with stale copies (`name-COMPUTERNAME.ext`). Use git to move work between machines.
+
+### Backend (macOS/Linux/manual setup)
 
 ```bash
 git checkout level1-integration
@@ -131,7 +155,7 @@ npm install
 npm run dev
 ```
 
-Vite proxies `/api` and `/uploads` to `http://127.0.0.1:5001` (see `vite.config.js`), so run the backend first.
+Vite proxies `/api` and `/uploads` to `http://127.0.0.1:5001` (see `vite.config.js`), so run the backend first. The dev server serves over HTTPS when a local mkcert certificate is present under `frontend/.cert/` — this is needed for browser camera/geolocation APIs to work when testing over a LAN IP — and falls back to plain HTTP if no cert exists.
 
 ### Tests
 
@@ -169,8 +193,31 @@ pytest
 | PUT | `/api/admin/users/<id>/role` | Change a user's role / suspend | JWT (Admin) |
 | GET | `/api/notifications/` | List the current user's notifications | JWT |
 | PUT | `/api/notifications/<id>/read` | Mark a notification read | JWT |
+| GET | `/api/community/feed` | Public civic-issue feed (recent / trending / nearby / priority) | JWT |
+| GET | `/api/community/issues/<id>` | Issue detail with community snapshot, evidence, timeline | JWT |
+| POST | `/api/community/issues/<id>/support` | Support an issue (citizen only) | JWT (Citizen) |
+| DELETE | `/api/community/issues/<id>/support` | Remove support | JWT (Citizen) |
+| POST | `/api/community/issues/<id>/verify` | Verify an issue's current state (citizen only) | JWT (Citizen) |
+| DELETE | `/api/community/issues/<id>/verify` | Withdraw a verification | JWT (Citizen) |
+| GET | `/api/community/issues/<id>/comments` | List public comments on an issue | JWT |
+| POST | `/api/community/issues/<id>/comments` | Post a comment | JWT |
+| PUT | `/api/community/comments/<id>` | Edit own comment | JWT |
+| DELETE | `/api/community/comments/<id>` | Soft-delete own comment | JWT |
+| POST | `/api/community/comments/<id>/report` | Report another citizen's comment | JWT |
+| GET | `/api/community/me/impact` | Current user's impact score, stats, and breakdown | JWT (Citizen) |
+| GET | `/api/community/me/activity` | Current user's recent impact-score events | JWT (Citizen) |
+| GET | `/api/community/moderation/comments` | Comment moderation queue | JWT (Officer/Admin) |
+| PUT | `/api/community/moderation/comments/<id>` | Remove or restore a flagged comment | JWT (Officer/Admin) |
+| GET | `/api/community/issues/<id>/intelligence` | Per-issue community signal for staff | JWT (Officer/Admin) |
+| GET | `/api/community/analytics` | Platform-wide community engagement analytics | JWT (Admin) |
 | GET | `/api/health` | Health check | – |
 | GET | `/uploads/<filename>` | Serve an uploaded complaint photo | – |
+
+## Known limitations
+
+- **Photo submission is camera-only.** `CameraCapture.jsx` calls the camera API directly with no file-upload fallback, so the report flow is unusable on a device/browser that denies or lacks camera access.
+- **No retry on transient Gemini errors.** A `503` ("model overloaded") from Gemini currently surfaces as a hard failure with no retry.
+- **Open CORS.** `CORS(app)` in `app.py` currently allows all origins; tighten this before any public deployment.
 
 ## Roadmap
 
@@ -180,8 +227,9 @@ pytest
 - [ ] Reseed/clean leftover test data (Playwright/manual test complaints and users) before any live demo
 - [ ] Lightweight CI (run `pytest` + `npm run build` on push)
 - [ ] Tighter CORS configuration for a real deployment
+- [ ] Build out the rest of Level 2 (community features) beyond the current support/verify/comment/impact-score/moderation slice
 
-Explicitly deferred beyond Level 1: heatmap polish, RAG, Redis, custom-trained AI, async AI processing, community/social features, Docker, full production CI/CD, production secrets infrastructure, database migration infrastructure.
+Explicitly deferred beyond Level 1/initial Level 2: heatmap polish, RAG, Redis, custom-trained AI, async AI processing, Docker, full production CI/CD, production secrets infrastructure, database migration infrastructure.
 
 ## Contributing
 

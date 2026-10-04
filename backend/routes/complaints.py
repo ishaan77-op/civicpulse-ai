@@ -11,6 +11,8 @@ from models.notification import Notification
 from models.user import User
 from services.ai_service import analyze_complaint
 from services.issue_clustering import get_or_create_issue_for_complaint
+from services import community_service as community
+from services import impact_score_service as impact
 from utils.time_helper import to_iso8601, utc_now
 
 
@@ -213,6 +215,18 @@ def create_complaint():
 
     db.session.add(complaint)
     db.session.commit()
+
+    # Level 2: Community Impact + "your report joined an existing issue"
+    # notification. Both are no-ops for an AI-flagged report until a human
+    # reviewer decides it is genuine (see routes/officers.py). Kept separate
+    # from the commit above so a failure here can never lose the complaint.
+    try:
+        impact.on_complaint_validated(complaint)
+        community.notify_complaint_grouped(complaint)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print("COMMUNITY HOOK ERROR:", str(e))
 
     return jsonify({
         "message": "Complaint created successfully",

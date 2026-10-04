@@ -12,11 +12,21 @@ from models.user import User
 from models.complaint import Complaint
 from models.civic_issue import CivicIssue
 from models.notification import Notification
+# Level 2 community tables - imported so db.create_all() below creates them.
+# These are brand-new tables only; no existing table is altered.
+from models.community import (  # noqa: F401
+    CivicIssueStatusChange,
+    ImpactScoreEvent,
+    IssueComment,
+    IssueSupport,
+    IssueVerification,
+)
 from routes.auth import auth_bp
 from routes.complaints import complaint_bp
 from routes.officers import officer_bp
 from routes.admin import admin_bp
 from routes.notifications import notification_bp
+from routes.community import community_bp
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -300,6 +310,7 @@ app.register_blueprint(complaint_bp, url_prefix="/api/complaints")
 app.register_blueprint(officer_bp, url_prefix="/api/officers")
 app.register_blueprint(admin_bp, url_prefix="/api/admin")
 app.register_blueprint(notification_bp, url_prefix="/api/notifications")
+app.register_blueprint(community_bp, url_prefix="/api/community")
 
 
 @app.errorhandler(HTTPException)
