@@ -52,6 +52,13 @@ export const getIssueComplaints = (id) =>
 export const updateIssueStatus = (id, status) =>
   api.put(`/officers/issues/${id}/status`, { status })
 
+// Officer work updates (Feature 1: Field-Work Evidence)
+export const getWorkUpdates = (complaintId) =>
+  api.get(`/officers/complaints/${complaintId}/work-updates`)
+
+export const createWorkUpdate = (complaintId, formData) =>
+  api.post(`/officers/complaints/${complaintId}/work-updates`, formData)
+
 // Admin API calls
 export const getAdminAnalytics = () =>
   api.get('/admin/analytics')
@@ -61,3 +68,19 @@ export const getAdminUsers = () =>
 
 export const updateUserRole = (userId, role) =>
   api.put(`/admin/users/${userId}/role`, { role })
+
+// Chief Officer: Feature 2 – Resolution Review
+export const submitResolutionReview = (complaintId, formData) =>
+  api.post(`/officers/complaints/${complaintId}/resolution-review`, formData)
+
+export const getResolutionReview = (complaintId) =>
+  api.get(`/officers/complaints/${complaintId}/resolution-review`)
+
+export const getResolutionQueue = () =>
+  api.get('/chief-officer/resolution-queue')
+
+export const decideResolutionReview = (reviewId, decision, rejectionNote) =>
+  api.put(`/chief-officer/resolution-reviews/${reviewId}/decide`, {
+    decision,
+    rejection_note: rejectionNote || undefined,
+  })

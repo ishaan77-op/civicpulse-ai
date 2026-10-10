@@ -15,6 +15,13 @@ function linksForRole(role) {
     ]
   }
 
+  if (role === 'Chief Officer') {
+    return [
+      { to: '/chief-officer', label: 'Review Queue' },
+      { to: '/community', label: 'Community' },
+    ]
+  }
+
   if (role === 'Admin') {
     return [
       { to: '/admin', label: 'Admin Intelligence' },

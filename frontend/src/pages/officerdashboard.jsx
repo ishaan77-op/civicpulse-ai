@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import AppShell from '../components/appshell.jsx'
 import HeatmapView from '../components/HeatmapView.jsx'
 import SpamReviewList from '../components/SpamReviewList.jsx'
@@ -327,6 +328,16 @@ export default function OfficerDashboard() {
                   <div><strong>Observation:</strong> {item.ai_analysis.visual_observation || 'N/A'}</div>
                 </div>
               )}
+
+              <div className="officer-card-actions">
+                <Link
+                  to={`/officer/complaints/${item.id}`}
+                  className="button button-outline"
+                  id={`btn-view-detail-${item.id}`}
+                >
+                  🔧 Field-Work Updates →
+                </Link>
+              </div>
             </article>
           ))}
         </div>

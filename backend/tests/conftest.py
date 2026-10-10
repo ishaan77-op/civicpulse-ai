@@ -87,3 +87,16 @@ def admin_user(app):
     db.session.add(user)
     db.session.commit()
     return user
+
+
+@pytest.fixture
+def chief_officer_user(app):
+    user = User(
+        name="Test Chief Officer",
+        email="chief@example.com",
+        password_hash=hash_password("chief123"),
+        role="Chief Officer"
+    )
+    db.session.add(user)
+    db.session.commit()
+    return user

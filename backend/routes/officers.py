@@ -1,5 +1,9 @@
+import os
+import uuid
+
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from werkzeug.utils import secure_filename
 
 from database.db import db
 from models.civic_issue import CivicIssue
@@ -7,6 +11,7 @@ from models.complaint import Complaint
 from models.notification import Notification
 from models.community import CivicIssueStatusChange
 from models.user import User
+from models.work_update import ComplaintWorkUpdate, ALLOWED_WORK_UPDATE_STATUSES
 from routes.complaints import serialize_complaint
 from services import community_service as community
 from services import impact_score_service as impact
@@ -473,4 +478,162 @@ def update_issue_status(issue_id):
     return jsonify({
         "message": "Issue status updated successfully",
         "issue": serialize_issue(issue)
+    }), 200
+
+
+# ==========================================
+# OFFICER WORK UPDATES / FIELD-WORK EVIDENCE
+# ==========================================
+
+def serialize_work_update(wu):
+    """Serialise a ComplaintWorkUpdate for API responses.
+    Officer name is included so the frontend does not need a second
+    request. GPS is included when available."""
+    officer_name = wu.officer.name if wu.officer else None
+    return {
+        "id": wu.id,
+        "complaint_id": wu.complaint_id,
+        "officer_id": wu.officer_id,
+        "officer_name": officer_name,
+        "status": wu.status,
+        "note": wu.note,
+        "image_filename": wu.image_filename,
+        "image_url": f"/uploads/{wu.image_filename}" if wu.image_filename else None,
+        "latitude": wu.latitude,
+        "longitude": wu.longitude,
+        # Server-authoritative timestamp - never supplied by the client.
+        "created_at": to_iso8601(wu.created_at),
+    }
+
+
+@officer_bp.route("/complaints/<int:complaint_id>/work-updates", methods=["POST"])
+@jwt_required()
+def create_work_update(complaint_id):
+    """Record a field-work evidence update for an existing complaint.
+
+    Accepts multipart/form-data so an evidence photo can be uploaded in
+    the same request. The server timestamp is always authoritative - the
+    client never supplies it.
+
+    Only Officers and Admins can create work updates. The complaint must
+    exist and must not have been confirmed as spam (same guard as the
+    officer complaint list endpoint).
+    """
+    user_id = get_jwt_identity()
+    user = User.query.get(int(user_id))
+
+    if not user or user.role not in ["Officer", "Admin"]:
+        return jsonify({"message": "Officer or Admin access required"}), 403
+
+    complaint = Complaint.query.get(complaint_id)
+    if not complaint:
+        return jsonify({"message": "Complaint not found"}), 404
+
+    # Confirmed-spam complaints are not active work items.
+    if complaint.spam_review_status == "Confirmed":
+        return jsonify({"message": "Cannot update a complaint confirmed as spam"}), 400
+
+    data = request.form
+
+    status = data.get("status", "").strip()
+    note = (data.get("note") or "").strip()
+
+    if not status:
+        return jsonify({"message": "Status is required"}), 400
+
+    if status not in ALLOWED_WORK_UPDATE_STATUSES:
+        return jsonify({
+            "message": "Invalid status",
+            "allowed_statuses": ALLOWED_WORK_UPDATE_STATUSES
+        }), 400
+
+    if not note:
+        return jsonify({"message": "A work/progress note is required"}), 400
+
+    # Optional GPS coordinates supplied by the officer's device.
+    latitude = None
+    longitude = None
+    lat_raw = data.get("latitude")
+    lng_raw = data.get("longitude")
+    if lat_raw is not None and lng_raw is not None:
+        try:
+            latitude = float(lat_raw)
+            longitude = float(lng_raw)
+        except (TypeError, ValueError):
+            return jsonify({"message": "GPS coordinates are invalid"}), 400
+
+    # Optional evidence photo - same upload scheme as create_complaint.
+    image_filename = None
+    image = request.files.get("image")
+    if image and image.filename:
+        original_filename = secure_filename(image.filename)
+        unique_filename = f"{uuid.uuid4().hex}_{original_filename}"
+        upload_folder = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            "uploads"
+        )
+        os.makedirs(upload_folder, exist_ok=True)
+        image_path = os.path.join(upload_folder, unique_filename)
+        image.save(image_path)
+        image_filename = unique_filename
+
+    # Server timestamp is set here (via the model default), never by the
+    # client. This is the authoritative record of when the work happened.
+    wu = ComplaintWorkUpdate(
+        complaint_id=complaint_id,
+        officer_id=user.id,
+        status=status,
+        note=note,
+        image_filename=image_filename,
+        latitude=latitude,
+        longitude=longitude,
+        # Explicitly pass utc_now() so the timestamp is set at request
+        # handling time even if the DB default were to differ.
+        created_at=utc_now(),
+    )
+
+    # Mirror the new status onto the complaint itself so the work queue
+    # always reflects the latest known state.
+    complaint.status = status
+
+    db.session.add(wu)
+    db.session.commit()
+
+    return jsonify({
+        "message": "Work update recorded successfully",
+        "work_update": serialize_work_update(wu),
+        "complaint": serialize_complaint(complaint),
+    }), 201
+
+
+@officer_bp.route("/complaints/<int:complaint_id>/work-updates", methods=["GET"])
+@jwt_required()
+def get_work_updates(complaint_id):
+    """Return all field-work updates for a complaint, oldest-first.
+
+    Only Officers and Admins can retrieve work updates through this
+    endpoint. The endpoint does NOT expose updates from other complaints
+    or any other officer-restricted data beyond the work log itself.
+    """
+    user_id = get_jwt_identity()
+    user = User.query.get(int(user_id))
+
+    if not user or user.role not in ["Officer", "Admin"]:
+        return jsonify({"message": "Officer or Admin access required"}), 403
+
+    complaint = Complaint.query.get(complaint_id)
+    if not complaint:
+        return jsonify({"message": "Complaint not found"}), 404
+
+    updates = (
+        ComplaintWorkUpdate.query
+        .filter_by(complaint_id=complaint_id)
+        .order_by(ComplaintWorkUpdate.created_at.asc())
+        .all()
+    )
+
+    return jsonify({
+        "complaint_id": complaint_id,
+        "total": len(updates),
+        "work_updates": [serialize_work_update(wu) for wu in updates],
     }), 200

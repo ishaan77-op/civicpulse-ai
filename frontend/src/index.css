@@ -149,3 +149,77 @@ body { background: radial-gradient(circle at 8% 5%, #fff4df 0, transparent 23rem
 .kpi-value.highlight,.bar-fill,.tab-btn.active { color:#1d7433; }.tab-btn.active { background:#1d7433; color:#fff; }.stat-progress { border-left-color:#e47b27; }.bar-fill { background:#1d7433; }.bar-fill.fill-sky,.bar-fill.fill-medium { background:#e47b27; }.role-officer { background:#e9f6e8; color:#176d30; }
 .officer-ai-strip { background:rgba(240,248,237,.74); border-color:rgba(31,103,47,.11); }.status-select-in-progress { color:#a4500d; background:#fff1dc; border-color:#ffd09e; }.priority-medium { color:#a4500d; background:#fff2df; border-color:#ffd09e; }
 @media (max-width: 800px) { .site-header { background:rgba(255,255,255,.84); }.nav-panel { background:rgba(255,255,255,.86); border-color:rgba(31,103,47,.13); backdrop-filter:blur(20px); } }
+
+/* ── Feature 1: Officer Work Updates / Field-Work Evidence ───────────────── */
+
+/* Officer card action row (links from list → detail view) */
+.officer-card-actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.button-outline { background: rgba(255,255,255,.72); color: #1d7433; border: 1px solid rgba(31,103,47,.3); backdrop-filter: blur(12px); }
+.button-outline:hover { background: #eaf6e8; border-color: #1d7433; }
+
+/* Officer complaint detail page */
+.officer-complaint-detail { display: flex; flex-direction: column; gap: 28px; }
+.officer-detail-summary { background: rgba(255,255,255,.66); border: 1px solid rgba(35,101,46,.12); border-radius: 18px; padding: 26px; backdrop-filter: blur(18px) saturate(145%); }
+.officer-detail-meta-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+
+/* Work update panel */
+.work-update-panel { background: rgba(255,255,255,.60); border: 1px solid rgba(35,101,46,.12); border-radius: 18px; padding: 26px; backdrop-filter: blur(18px) saturate(145%); }
+.work-update-panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+.work-update-panel-header h2 { margin: 0; font: 700 22px Manrope, sans-serif; letter-spacing: -.6px; }
+
+/* Inline submission form */
+.work-update-form { background: rgba(255,255,255,.82); border: 1px solid rgba(237,139,54,.22); border-radius: 16px; padding: 24px; margin-bottom: 24px; }
+.work-update-form h3 { margin: 0 0 18px; font: 700 18px Manrope, sans-serif; letter-spacing: -.5px; color: #1d7433; }
+
+/* GPS capture block */
+.work-update-gps-block { display: flex; flex-direction: column; gap: 8px; }
+.gps-captured { display: flex; align-items: center; gap: 14px; padding: 10px 14px; background: #e6f6e6; border: 1px solid #bbeebb; border-radius: 10px; font-size: 13px; font-weight: 700; color: #176d30; }
+.gps-captured .button { width: auto; min-height: 36px; padding: 0 14px; font-size: 12px; }
+
+/* Camera block */
+.work-update-camera-block { display: flex; flex-direction: column; gap: 8px; }
+
+/* Work update log list */
+.work-update-list { display: flex; flex-direction: column; gap: 16px; }
+.work-update-empty { color: #94a3b8; font-size: 13px; font-style: italic; padding: 20px 0; }
+
+/* Individual work update cards */
+.work-update-card { background: rgba(255,255,255,.72); border: 1px solid rgba(35,101,46,.11); border-radius: 14px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 4px 14px rgba(44,74,43,.07); }
+.work-update-header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.work-update-meta { font-size: 12px; color: #64748b; font-weight: 600; }
+.work-update-note { margin: 0; font-size: 14px; color: #1a2e1f; line-height: 1.65; }
+.work-update-photo img { width: 100%; max-height: 260px; object-fit: cover; border-radius: 10px; border: 1px solid #e2e8f0; }
+.work-update-gps { margin: 0; font-size: 12px; color: #64748b; font-weight: 600; }
+
+@media (max-width: 800px) {
+  .work-update-panel-header { flex-direction: column; align-items: flex-start; }
+  .officer-detail-meta-row { gap: 7px; }
+}
+
+/* ── Feature 2: Chief Officer Review & Final Resolution Verification ────── */
+
+.status-pending-review { color: #6941c6; background: #f9f5ff; border: 1px solid #e9d7fe; }
+.status-select-pending-review { color: #6941c6; background: #f9f5ff; border-color: #e9d7fe; }
+.role-chief-officer { background: #f4ebff; color: #6941c6; }
+
+.resolution-rejection-notice { background: #fef3f2; border: 1px solid #fecdca; border-radius: 12px; padding: 16px 18px; color: #b42318; font-size: 13px; line-height: 1.5; margin-bottom: 20px; }
+.resolution-rejection-reason { font-weight: 700; margin: 6px 0; color: #912018; }
+.resolution-pending-notice { background: #f9f5ff; border: 1px solid #e9d7fe; border-radius: 12px; padding: 16px 18px; color: #53389e; font-size: 13px; line-height: 1.5; margin-bottom: 20px; }
+.resolution-pending-note { font-size: 14px; margin: 8px 0; color: #344054; }
+.resolution-approved-notice { background: #ecfdf3; border: 1px solid #abefc6; border-radius: 12px; padding: 16px 18px; color: #147a45; font-size: 13px; line-height: 1.5; margin-bottom: 20px; }
+.resolution-form-help { font-size: 13px; color: #64748b; margin: -10px 0 16px; line-height: 1.5; }
+.resolution-evidence-photo { margin-top: 10px; }
+.resolution-evidence-photo img { max-height: 280px; width: 100%; object-fit: cover; border-radius: 10px; border: 1px solid #e2e8f0; }
+
+.resolution-queue-list { display: flex; flex-direction: column; gap: 20px; margin-top: 24px; }
+.resolution-queue-card { background: rgba(255,255,255,.78); border: 1px solid rgba(35,101,46,.14); border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 4px 16px rgba(44,74,43,.06); backdrop-filter: blur(14px); }
+.resolution-card-header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.resolution-card-title { font-size: 16px; color: #1a2e1f; }
+.resolution-card-meta { font-size: 13px; color: #64748b; margin: 0; }
+.resolution-evidence-section { background: rgba(240,248,237,.5); border: 1px solid rgba(31,103,47,.12); border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+.resolution-completion-note { font-size: 14px; color: #1a2e1f; line-height: 1.6; margin: 0; }
+.resolution-reject-form { background: #fff5f5; border: 1px solid #fed7d7; border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+.resolution-reject-form textarea { width: 100%; border: 1px solid #feb2b2; border-radius: 8px; padding: 10px; font-size: 14px; outline: none; }
+.resolution-reject-form textarea:focus { border-color: #e53e3e; box-shadow: 0 0 0 3px #fed7d7; }
+.button-danger { background: #dc2626; color: #fff; border: 1px solid #b91c1c; }
+.button-danger:hover { background: #b91c1c; }

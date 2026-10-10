@@ -128,8 +128,8 @@ def update_user_role(target_user_id):
         return jsonify({"message": "Role is required"}), 400
 
     new_role = data["role"]
-    if new_role not in ["Citizen", "Officer", "Admin"]:
-        return jsonify({"message": "Invalid role. Must be Citizen, Officer, or Admin"}), 400
+    if new_role not in ["Citizen", "Officer", "Chief Officer", "Admin"]:
+        return jsonify({"message": "Invalid role. Must be Citizen, Officer, Chief Officer, or Admin"}), 400
 
     target_user.role = new_role
     db.session.commit()

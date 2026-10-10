@@ -29,11 +29,14 @@ export default function Navbar() {
           <div className="nav-actions">
             {isAuthenticated ? (
               <>
-                <Link className="button button-small button-primary" to="/dashboard" onClick={closeMenu}>
+                <Link className="button button-small button-primary" to={homeRouteForRole(user?.role)} onClick={closeMenu}>
                   Dashboard ({user?.name || 'Account'}) <span aria-hidden="true">→</span>
                 </Link>
                 {(user?.role === 'Officer' || user?.role === 'Admin') && (
                   <Link className="text-link" to="/officer" onClick={closeMenu}>Officer</Link>
+                )}
+                {user?.role === 'Chief Officer' && (
+                  <Link className="text-link" to="/chief-officer" onClick={closeMenu}>Chief Officer</Link>
                 )}
                 {user?.role === 'Admin' && (
                   <Link className="text-link" to="/admin" onClick={closeMenu}>Admin</Link>

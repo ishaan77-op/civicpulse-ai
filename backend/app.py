@@ -21,12 +21,18 @@ from models.community import (  # noqa: F401
     IssueSupport,
     IssueVerification,
 )
+# Officer field-work evidence log (Feature 1). Brand-new table; no existing
+# table is altered.
+from models.work_update import ComplaintWorkUpdate  # noqa: F401
+# Chief Officer resolution review log (Feature 2). Brand-new table only.
+from models.resolution_review import ResolutionReview  # noqa: F401
 from routes.auth import auth_bp
 from routes.complaints import complaint_bp
 from routes.officers import officer_bp
 from routes.admin import admin_bp
 from routes.notifications import notification_bp
 from routes.community import community_bp
+from routes.resolution_review import resolution_bp
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -284,6 +290,101 @@ def migrate_out_of_scope_rejection_columns():
         conn.close()
 
 
+def migrate_work_update_table():
+    """Additive migration: ensure the complaint_work_updates table exists
+    for databases that pre-date this feature. db.create_all() already
+    handles new databases; this guard is only needed so the dev database
+    created before this feature was added is never broken on restart.
+    No-op if the table already exists. Never drops data."""
+
+    db_uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+
+    if not db_uri.startswith("sqlite:///"):
+        return
+
+    db_path = db_uri[len("sqlite:///"):]
+
+    if not os.path.exists(db_path):
+        return
+
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='complaint_work_updates'"
+        )
+        if not cur.fetchone():
+            cur.execute("""
+                CREATE TABLE complaint_work_updates (
+                    id INTEGER PRIMARY KEY,
+                    complaint_id INTEGER NOT NULL REFERENCES complaints(id),
+                    officer_id INTEGER NOT NULL REFERENCES users(id),
+                    status VARCHAR(50) NOT NULL DEFAULT 'In Progress',
+                    note TEXT NOT NULL,
+                    image_filename VARCHAR(255),
+                    latitude FLOAT,
+                    longitude FLOAT,
+                    created_at DATETIME NOT NULL
+                )
+            """)
+            cur.execute(
+                "CREATE INDEX ix_complaint_work_updates_complaint_id "
+                "ON complaint_work_updates(complaint_id)"
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def migrate_resolution_review_table():
+    """Additive migration: ensure the resolution_reviews table exists
+    for databases that pre-date this feature. db.create_all() already
+    handles new databases; this guard is only needed so the dev database
+    created before Feature 2 was added is never broken on restart.
+    No-op if the table already exists. Never drops data."""
+
+    db_uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+
+    if not db_uri.startswith("sqlite:///"):
+        return
+
+    db_path = db_uri[len("sqlite:///"):]
+
+    if not os.path.exists(db_path):
+        return
+
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='resolution_reviews'"
+        )
+        if not cur.fetchone():
+            cur.execute("""
+                CREATE TABLE resolution_reviews (
+                    id INTEGER PRIMARY KEY,
+                    complaint_id INTEGER NOT NULL REFERENCES complaints(id),
+                    submitted_by INTEGER NOT NULL REFERENCES users(id),
+                    completion_note TEXT NOT NULL,
+                    image_filename VARCHAR(255) NOT NULL,
+                    latitude FLOAT,
+                    longitude FLOAT,
+                    submitted_at DATETIME NOT NULL,
+                    decision VARCHAR(20),
+                    reviewed_by INTEGER REFERENCES users(id),
+                    rejection_note TEXT,
+                    reviewed_at DATETIME
+                )
+            """)
+            cur.execute(
+                "CREATE INDEX ix_resolution_reviews_complaint_id "
+                "ON resolution_reviews(complaint_id)"
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 with app.app_context():
     instance_path = os.path.join(os.path.dirname(__file__), "instance")
     os.makedirs(instance_path, exist_ok=True)
@@ -293,6 +394,8 @@ with app.app_context():
     migrate_spam_reopen_columns()
     migrate_issue_clustering_columns()
     migrate_out_of_scope_rejection_columns()
+    migrate_work_update_table()
+    migrate_resolution_review_table()
 
 
 @jwt.token_in_blocklist_loader
@@ -311,6 +414,7 @@ app.register_blueprint(officer_bp, url_prefix="/api/officers")
 app.register_blueprint(admin_bp, url_prefix="/api/admin")
 app.register_blueprint(notification_bp, url_prefix="/api/notifications")
 app.register_blueprint(community_bp, url_prefix="/api/community")
+app.register_blueprint(resolution_bp, url_prefix="/api")
 
 
 @app.errorhandler(HTTPException)
