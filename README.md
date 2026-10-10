@@ -13,7 +13,7 @@
 
 ## About
 
-NMC-SmartFix is a civic-tech platform built for Nashik Municipal Corporation (NMC): citizens submit issues such as potholes, garbage overflow, water supply problems, faulty streetlights, or drainage blockages — with a title, description, a camera photo, and a location picked on an interactive map. A Gemini-powered AI service reads the text and photo together and returns a structured analysis (category, priority, responsible department, a short visual observation, and a summary, plus a spam/mismatch signal), which is attached to the complaint automatically. Complaints are also auto-clustered into shared "civic issues" so duplicate reports of the same pothole don't create separate work items. Citizens can additionally support, verify, and comment on public civic issues, and track a personal Community Impact Score. Municipal officers work a triaged queue (filter, update status, review spam, reject out-of-scope reports, moderate community comments), and admins get a platform-wide dashboard with resolution rates, category/department/priority breakdowns, and community engagement analytics.
+NMC-SmartFix is a civic-tech platform built for Nashik Municipal Corporation (NMC): citizens submit issues such as potholes, garbage overflow, water supply problems, faulty streetlights, or drainage blockages — with a title, description, a camera photo, and a location picked on an interactive map. A Gemini-powered AI service reads the text and photo together and returns a structured analysis (category, priority, responsible department, a short visual observation, and a summary, plus a spam/mismatch signal), which is attached to the complaint automatically. Complaints are also auto-clustered into shared "civic issues" so duplicate reports of the same pothole don't create separate work items. Citizens can additionally support, verify, and comment on public civic issues, and track a personal Community Impact Score. Municipal officers track and update field-work evidence, while Chief Officers inspect resolution evidence in a dedicated review queue before complaints can officially be marked "Resolved". Admins get a platform-wide dashboard with resolution rates, category/department/priority breakdowns, and community engagement analytics.
 
 The pilot location baked into the map component is **Nashik, India**.
 
@@ -21,7 +21,7 @@ The pilot location baked into the map component is **Nashik, India**.
 
 The full application — Flask API, Gemini AI analysis, JWT auth, role-based dashboards, the Leaflet map picker, and the community engagement layer — lives on the **`level1-integration`** branch (this branch, `level1-integration-work`, is the active integration/verification branch built on top of it, merged with the community/maps/notifications/moderation features from `ai-engine`). **`main` is still the original Vite + React scaffold and does not contain a `backend/` directory yet.** Use `level1-integration` (or a branch based on it) to run the real application described below.
 
-This is Level 1 of the project (core complaint flow) plus an initial Level 2 slice (community engagement: support, verification, comments, impact scoring, moderation). Heatmap polish, RAG, Redis, custom-trained AI, async processing, and containerization are intentionally out of scope for now.
+This is Level 1 of the project (core complaint flow) plus field-work evidence tracking, Chief Officer resolution verification, and an initial Level 2 slice (community engagement: support, verification, comments, impact scoring, moderation). Heatmap polish, RAG, Redis, custom-trained AI, async processing, and containerization are intentionally out of scope for now.
 
 ## Key features
 
@@ -29,7 +29,7 @@ This is Level 1 of the project (core complaint flow) plus an initial Level 2 sli
 - Register / log in (JWT-based auth, bcrypt-hashed passwords)
 - Submit a complaint with title, description, a **live camera photo** (no file-upload fallback — see note below), and a location picked/searched on an interactive Nashik map
 - View AI-generated category, priority, department, visual observation, and summary for each submitted complaint
-- Track status (`Pending` → `In Progress` → `Resolved`, or `Rejected` if out of scope)
+- Track official status (`Pending` → `In Progress` → `Pending Review` → `Resolved`, or `Rejected` if out of scope)
 - Browse the community feed of public civic issues (recent / trending / nearby / priority), support or verify an issue, and comment on it
 - Track a personal Community Impact Score and recent activity
 
@@ -40,14 +40,24 @@ This is Level 1 of the project (core complaint flow) plus an initial Level 2 sli
 
 **Officer**
 - Queue of all complaints, filterable by status, category, keyword/location search
-- Update a complaint's status, reject it as out-of-scope (with reason), or reopen a rejected/spam decision
+- Dedicated complaint detail page (`/officer/complaints/:id`) with chronological field-work log
+- **Field-work updates**: record progress notes, photos, and optional GPS coordinates; updates status to `Pending` or `In Progress` (ordinary work updates cannot bypass review to set `Resolved`)
+- **Resolution review submission**: submit final completion note and mandatory evidence photo, transitioning status to `Pending Review`
+- View Chief Officer rejection feedback and resubmit corrected resolution evidence
+- Reject out-of-scope complaints (with reason), or reopen a rejected/spam decision
 - Spam/misreport review queue and issue-cluster view (multiple complaints grouped into one civic issue)
-- Quick stats (total / pending / in progress / resolved) and a damage heatmap tab
+- Quick stats (total / pending / in progress / pending review / resolved) and a damage heatmap tab
 - Per-issue community intelligence (support/verification/comment signal) and a comment moderation queue (flagged/removed/visible, remove or restore)
+
+**Chief Officer**
+- Dedicated Resolution Review Queue (`/chief-officer`)
+- Inspect submitted resolution evidence: completion note, final evidence photo, GPS coordinates, submitting officer, and server timestamp
+- Approve resolution (officially transitions complaint status to `Resolved`) or reject (requires rejection reason, reverts status to `In Progress` for officer correction)
+- Server-enforced audit guarantees: submitting officer cannot approve their own request, no double-approvals, and authoritative server timestamps
 
 **Admin**
 - Platform-wide analytics: totals, resolution rate, and breakdowns by category, department, and priority
-- User list and role management (promote/demote Citizen / Officer / Admin), including suspending spam-flagged users
+- User list and role management (promote/demote Citizen / Officer / Chief Officer / Admin), including suspending spam-flagged users
 - Same spam review, issue-cluster, and heatmap views as Officer
 - Community analytics: supports, verifications, comments, impact-score averages, community-confirmed-unresolved and disputed-resolution counts, engagement by category
 
@@ -80,12 +90,14 @@ civicpulse-ai/
 │   │   ├── components/        # appshell, navbar, footer, brand, protectedroute,
 │   │   │                        # MapPicker, CameraCapture, HeatmapView,
 │   │   │                        # SpamReviewList, IssueClusterList, RejectedComplaintsList,
+│   │   │                        # WorkUpdatePanel, ResolutionReviewPanel,
 │   │   │                        # NotificationBanner, Community* (analytics, comments, issue card, moderation list), ImpactPanel
 │   │   ├── config/             # api.js, routes.js
 │   │   ├── context/            # authcontext.jsx, authcontextvalue.jsx
 │   │   ├── pages/              # home, about, features, how-it-works, login, register,
 │   │   │                        # citizendashboard, report, complaints, complaintdetails,
-│   │   │                        # profile, officerdashboard, admindashboard, notfound,
+│   │   │                        # profile, officerdashboard, officercomplaintdetail,
+│   │   │                        # chiefOfficerDashboard, admindashboard, notfound,
 │   │   │                        # community, communityissue
 │   │   ├── services/           # api.js, authservice.js, complaintservice.js, notificationservice.js, communityservice.js
 │   │   └── utils/               # constants.js, formatDateTime.js, helper.js, roleHome.js, community.js
@@ -95,12 +107,14 @@ civicpulse-ai/
     ├── config.py
     ├── seed.py                  # seeds demo Citizen/Officer/Admin accounts
     ├── database/db.py
-    ├── models/                  # user.py, complaint.py, civic_issue.py, notification.py, community.py
-    ├── routes/                  # auth.py, complaints.py, officers.py, admin.py, notifications.py, community.py
+    ├── models/                  # user.py, complaint.py, civic_issue.py, notification.py, community.py,
+    │                             # work_update.py, resolution_review.py
+    ├── routes/                  # auth.py, complaints.py, officers.py, admin.py, notifications.py, community.py,
+    │                             # resolution_review.py
     ├── services/                # ai_service.py, auth_service.py, complaint_service.py, issue_clustering.py,
     │                             # community_service.py, community_identity.py, impact_score_service.py
     ├── utils/                   # jwt_helper.py, time_helper.py, validators.py
-    └── tests/                   # pytest suite (includes test_community.py)
+    └── tests/                   # pytest suite (133 tests: test_work_updates.py, test_resolution_review.py, test_community.py, etc.)
 ```
 
 ## Getting started
@@ -162,7 +176,7 @@ Vite proxies `/api` and `/uploads` to `http://127.0.0.1:5001` (see `vite.config.
 ```bash
 cd backend
 source venv/bin/activate
-pytest
+pytest -q   # 133 automated tests covering auth, complaints, clustering, community, field updates, and resolution reviews
 ```
 
 ## API overview
@@ -176,10 +190,16 @@ pytest
 | GET | `/api/complaints/` | List the current user's complaints | JWT |
 | GET | `/api/complaints/<id>` | Get one complaint (own, or any as Officer/Admin) | JWT |
 | PUT | `/api/complaints/<id>` | Edit a complaint's own fields | JWT |
-| PUT | `/api/complaints/<id>/status` | Update status: Pending / In Progress / Resolved | JWT (Officer/Admin) |
+| PUT | `/api/complaints/<id>/status` | Update status: Pending / In Progress | JWT (Officer/Admin) |
 | PUT | `/api/complaints/<id>/reject` | Reject a complaint as out-of-scope, with reason | JWT (Officer/Admin) |
 | PUT | `/api/complaints/<id>/reopen-rejection` | Reopen a previously rejected complaint | JWT (Officer/Admin) |
 | GET | `/api/officers/complaints` | Filterable complaint queue | JWT (Officer/Admin) |
+| POST | `/api/officers/complaints/<id>/work-updates` | Record field-work progress note, photo, GPS (status: Pending / In Progress) | JWT (Officer/Admin) |
+| GET | `/api/officers/complaints/<id>/work-updates` | List field-work updates for a complaint | JWT (Officer/Admin) |
+| POST | `/api/officers/complaints/<id>/resolution-review` | Submit final-resolution evidence for review (status → Pending Review) | JWT (Officer/Admin) |
+| GET | `/api/officers/complaints/<id>/resolution-review` | Get latest resolution review for a complaint | JWT (Officer/Chief Officer/Admin) |
+| GET | `/api/chief-officer/resolution-queue` | List complaints awaiting final resolution approval | JWT (Chief Officer) |
+| PUT | `/api/chief-officer/resolution-reviews/<id>/decide` | Approve (status → Resolved) or reject (status → In Progress) with reason | JWT (Chief Officer) |
 | GET | `/api/officers/heatmap` | Location + weight data for the damage heatmap | JWT (Officer/Admin) |
 | GET | `/api/officers/stats` | Quick status counts | JWT (Officer/Admin) |
 | GET | `/api/officers/spam` | Spam/misreport review queue | JWT (Officer/Admin) |
@@ -190,7 +210,7 @@ pytest
 | PUT | `/api/officers/issues/<id>/status` | Update a cluster's overall status | JWT (Officer/Admin) |
 | GET | `/api/admin/analytics` | Platform-wide analytics and breakdowns | JWT (Admin) |
 | GET | `/api/admin/users` | List all users | JWT (Admin) |
-| PUT | `/api/admin/users/<id>/role` | Change a user's role / suspend | JWT (Admin) |
+| PUT | `/api/admin/users/<id>/role` | Change a user's role (Citizen / Officer / Chief Officer / Admin) / suspend | JWT (Admin) |
 | GET | `/api/notifications/` | List the current user's notifications | JWT |
 | PUT | `/api/notifications/<id>/read` | Mark a notification read | JWT |
 | GET | `/api/community/feed` | Public civic-issue feed (recent / trending / nearby / priority) | JWT |
