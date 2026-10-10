@@ -1,6 +1,6 @@
-# CivicPulse AI
+# NMC-SmartFix (CivicPulse AI)
 
-**AI-powered municipal complaint intelligence platform** — citizens report civic issues with a photo and a pinned location, and an AI engine automatically classifies, prioritizes, and routes each report to the right municipal department.
+**AI-powered municipal complaint intelligence platform** — citizens report civic issues with a live photo and a pinned map location, and Google Gemini automatically classifies, prioritizes, and routes each report to the right municipal department.
 
 <p>
   <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg">
@@ -13,177 +13,276 @@
 
 ## About
 
-CivicPulse AI is a civic-tech platform for municipal complaint management. Citizens submit issues such as potholes, garbage overflow, water supply problems, faulty streetlights, or drainage blockages — with a description, an optional photo, and a location picked on a map. A Gemini-powered AI service reads the text and image together and returns a structured analysis (category, priority, responsible department, a short visual observation, and a summary), which is attached to the complaint automatically. Municipal officers then work a triaged queue and update status, while admins get a dashboard with resolution rates and category/department/priority breakdowns.
+NMC-SmartFix is a civic-tech platform built for Nashik Municipal Corporation (NMC): citizens submit issues such as potholes, garbage overflow, water supply problems, faulty streetlights, or drainage blockages — with a title, description, a camera photo, and a location picked on an interactive map. A Gemini-powered AI service reads the text and photo together and returns a structured analysis (category, priority, responsible department, a short visual observation, and a summary, plus a spam/mismatch signal), which is attached to the complaint automatically. Complaints are also auto-clustered into shared "civic issues" so duplicate reports of the same pothole don't create separate work items. Citizens can additionally support, verify, and comment on public civic issues, and track a personal Community Impact Score. Municipal officers track and update field-work evidence, while Chief Officers inspect resolution evidence in a dedicated review queue before complaints can officially be marked "Resolved". Admins get a platform-wide dashboard with resolution rates, category/department/priority breakdowns, and community engagement analytics.
 
-The current pilot location baked into the map component is **Nashik, India**, though the app is designed to generalize to other municipalities.
+The pilot location baked into the map component is **Nashik, India**.
 
-## ⚠️ Project status
+## Project status
 
-This repository is under active, branch-based development by a small team, and **the `main` branch currently reflects an early scaffold**, not the full application described below.
+The full application — Flask API, Gemini AI analysis, JWT auth, role-based dashboards, the Leaflet map picker, and the community engagement layer — lives on the **`level1-integration`** branch (this branch, `level1-integration-work`, is the active integration/verification branch built on top of it, merged with the community/maps/notifications/moderation features from `ai-engine`). **`main` is still the original Vite + React scaffold and does not contain a `backend/` directory yet.** Use `level1-integration` (or a branch based on it) to run the real application described below.
 
-- `main` contains the initial Vite + React frontend skeleton (folder structure, routing dependency installed, mostly empty placeholder files) and stub `docs/` files. There is no `backend/` directory on `main` yet.
-- The functionality described in this README — the Flask API, the AI complaint-analysis engine, JWT auth, the map picker, and the role-based dashboards — lives on unmerged feature branches:
+This is Level 1 of the project (core complaint flow) plus field-work evidence tracking, Chief Officer resolution verification, and an initial Level 2 slice (community engagement: support, verification, comments, impact scoring, moderation). Heatmap polish, RAG, Redis, custom-trained AI, async processing, and containerization are intentionally out of scope for now.
 
-| Branch | Focus |
-|---|---|
-| `ai-engine` | Gemini-based complaint analysis service (`backend/services/ai_service.py`) |
-| `backend-auth` | Flask API skeleton, JWT auth, user model |
-| `backend-complaints` | Complaint model, complaint CRUD routes |
-| `feature/user-model` | User schema and role handling |
-| `feature/frontend-routing` | Frontend routing wired to backend APIs, backend test suite |
-| `feature/member4-integration-maps` | Leaflet-based location picker, marketing pages (About, Features, How it Works) |
+## 🚀 Latest Updates (Completed Features)
 
-This README documents the project as a whole so it's useful both as a map of what's implemented where and as the target `README.md` once the branches above are merged into `main`. Sections below note where something is not yet on `main`.
+### Feature 1: Officer Field-Work Updates & Evidence Logging
+Field officers can now maintain an immutable, server-timestamped work log directly from the field before resolving complaints:
+- **Dedicated Officer Detail View (`/officer/complaints/:id`)**: Shows full complaint details, citizen-reported photos, AI analysis, and historical field logs.
+- **Progress Notes & Photo Evidence**: Officers capture on-site photos and work notes at each stage of maintenance.
+- **Device GPS Capture**: Records coordinates of field work when browser permissions are granted.
+- **Server-Authoritative Audit**: Timestamps (`created_at`) and officer identities (`officer_id`) are generated exclusively on the backend from authenticated JWT sessions.
+- **Guarded Status Lifecycle**: Ordinary work updates can transition complaints between `Pending` and `In Progress`, but are strictly prohibited from bypassing review to mark complaints `Resolved`.
+
+### Feature 2: Chief Officer Review & Final Resolution Verification Workflow
+Complaints can no longer be unilaterally marked "Resolved". A multi-stakeholder verification workflow ensures quality control and municipal accountability:
+1. **Officer Submits for Review**: Once field work is complete, the officer submits a formal resolution request with a mandatory completion note and final evidence photo via `ResolutionReviewPanel`.
+2. **`Pending Review` State**: The complaint enters `Pending Review`, signaling to all dashboards that work is complete and awaiting sign-off.
+3. **Dedicated Chief Officer Dashboard (`/chief-officer`)**: Chief Officers access a dedicated review queue displaying complaint context, work history, completion notes, evidence photos, GPS coordinates, submitting officer details, and timestamps.
+4. **Authoritative Decision**:
+   - **Approve**: Marks the complaint officially as `Resolved`, records reviewer identity and timestamp.
+   - **Reject**: Requires a mandatory rejection reason, reverts the complaint status to `In Progress`, and displays the reason on the officer's dashboard so corrective evidence can be submitted.
+5. **Security & Integrity Rules**:
+   - **No Self-Approval**: A submitting officer cannot approve their own resolution request (`403 Forbidden`).
+   - **No Double-Approval**: Once decided, reviews cannot be approved or rejected multiple times (`400 Bad Request`).
+   - **Strict Role Enforcement**: Only users with the `Chief Officer` role can view the queue and decide on resolution requests.
+   - **Citizen Shielding**: Citizens see official status updates (`Pending Review` → `Resolved`) but cannot see or access officer review endpoints.
 
 ## Key features
 
 **Citizen**
 - Register / log in (JWT-based auth, bcrypt-hashed passwords)
-- Submit a complaint with title, description, category, an optional photo, and a location picked on an interactive map
-- Track the status of submitted complaints (`Pending` → `In Progress` → `Resolved`)
+- Submit a complaint with title, description, a **live camera photo** (no file-upload fallback — see note below), and a location picked/searched on an interactive Nashik map
+- View AI-generated category, priority, department, visual observation, and summary for each submitted complaint
+- Track official status (`Pending` → `In Progress` → `Pending Review` → `Resolved`, or `Rejected` if out of scope)
+- Browse the community feed of public civic issues (recent / trending / nearby / priority), support or verify an issue, and comment on it
+- Track a personal Community Impact Score and recent activity
 
-**AI engine**
-- Sends each complaint's text (and image, if provided) to Google Gemini
-- Returns structured JSON: `category`, `priority`, `department`, `visual_observation`, `summary`
-- Categories: Road Infrastructure, Garbage and Waste, Water Supply, Street Lighting, Drainage, Public Safety, Other
-- Priorities: Low, Medium, High, Critical
+**AI engine** (`backend/services/ai_service.py`)
+- Sends each complaint's text and photo to Google Gemini in one call
+- Returns structured JSON: `category`, `priority`, `department`, `visual_observation`, `summary`, plus a `spam_flag`/`spam_reason`/`spam_confidence` signal when the photo doesn't match the description
+- Categories: Road Infrastructure, Street Lighting, Garbage and Waste, Water Supply, Drainage, Public Safety, Other
 
 **Officer**
-- Queue of all complaints, filterable by status, category, priority, and department
-- Update a complaint's status
-- Quick stats (total / pending / in progress / resolved)
+- Queue of all complaints, filterable by status, category, keyword/location search
+- Dedicated complaint detail page (`/officer/complaints/:id`) with chronological field-work log
+- **Field-work updates**: record progress notes, photos, and optional GPS coordinates; updates status to `Pending` or `In Progress` (ordinary work updates cannot bypass review to set `Resolved`)
+- **Resolution review submission**: submit final completion note and mandatory evidence photo, transitioning status to `Pending Review`
+- View Chief Officer rejection feedback and resubmit corrected resolution evidence
+- Reject out-of-scope complaints (with reason), or reopen a rejected/spam decision
+- Spam/misreport review queue and issue-cluster view (multiple complaints grouped into one civic issue)
+- Quick stats (total / pending / in progress / pending review / resolved) and a damage heatmap tab
+- Per-issue community intelligence (support/verification/comment signal) and a comment moderation queue (flagged/removed/visible, remove or restore)
+
+**Chief Officer**
+- Dedicated Resolution Review Queue (`/chief-officer`)
+- Inspect submitted resolution evidence: completion note, final evidence photo, GPS coordinates, submitting officer, and server timestamp
+- Approve resolution (officially transitions complaint status to `Resolved`) or reject (requires rejection reason, reverts status to `In Progress` for officer correction)
+- Server-enforced audit guarantees: submitting officer cannot approve their own request, no double-approvals, and authoritative server timestamps
 
 **Admin**
 - Platform-wide analytics: totals, resolution rate, and breakdowns by category, department, and priority
-- User list and role management (promote/demote Citizen / Officer / Admin)
+- User list and role management (promote/demote Citizen / Officer / Chief Officer / Admin), including suspending spam-flagged users
+- Same spam review, issue-cluster, and heatmap views as Officer
+- Community analytics: supports, verifications, comments, impact-score averages, community-confirmed-unresolved and disputed-resolution counts, engagement by category
 
-*(All items above are implemented on feature branches; none are merged into `main` yet.)*
+> **Note on the camera-only photo requirement:** `CameraCapture.jsx` calls `getUserMedia` directly with no `<input type="file">` fallback — a report cannot be submitted without live camera access. This looks intentional (it stops citizens from uploading old/reused/stock photos), but it also means the app cannot be used on a device/browser that denies or lacks camera access. Worth confirming this is the desired behavior before a demo.
 
 ## Tech stack
 
 **Frontend** — `frontend/`
-- React 19 + Vite
+- React 19 + Vite 8 (Rolldown-powered)
 - React Router v7
 - Tailwind CSS v4
 - Axios for API calls
-- React-Leaflet + Leaflet for the map/location picker
+- React-Leaflet + Leaflet (+ `leaflet.heat` for the heatmap tab, `leaflet-control-geocoder` for address search) for the map/location picker
+- Camera capture via the browser `MediaDevices` API (no file-upload fallback by design — see note above)
 
-**Backend** — `backend/` (feature branches only)
+**Backend** — `backend/`
 - Flask 3 + Flask-CORS
-- Flask-SQLAlchemy (SQLite by default) for the User and Complaint models
+- Flask-SQLAlchemy (SQLite by default) for User, Complaint, CivicIssue, Notification, and community models (support, verification, comment, impact-score event)
 - Flask-JWT-Extended for authentication, bcrypt for password hashing
 - `google-genai` (Gemini) for AI complaint analysis
-- pytest-based test suite (`backend/tests/`, on `feature/frontend-routing`)
+- pytest test suite (`backend/tests/`), including dedicated community-feature tests
 
 ## Repository structure
 
 ```
 civicpulse-ai/
-├── docs/                     # api.md, database.md, requirements.md, meeting-log.md (currently empty)
 ├── frontend/
 │   ├── src/
 │   │   ├── assets/
-│   │   ├── components/       # Navbar, Footer, Button, Card, Input, Loader, ProtectedRoute, MapPicker*
-│   │   ├── config/           # api.js, routes.js
-│   │   ├── context/          # authcontext.jsx
-│   │   ├── pages/            # home, login, register, citizen/officer/admin dashboards, notfound
-│   │   ├── routes/           # AppRoutes.jsx
-│   │   ├── services/         # api.js, authservice.js, complaintservice.js
-│   │   └── utils/
+│   │   ├── components/        # appshell, navbar, footer, brand, protectedroute,
+│   │   │                        # MapPicker, CameraCapture, HeatmapView,
+│   │   │                        # SpamReviewList, IssueClusterList, RejectedComplaintsList,
+│   │   │                        # WorkUpdatePanel, ResolutionReviewPanel,
+│   │   │                        # NotificationBanner, Community* (analytics, comments, issue card, moderation list), ImpactPanel
+│   │   ├── config/             # api.js, routes.js
+│   │   ├── context/            # authcontext.jsx, authcontextvalue.jsx
+│   │   ├── pages/              # home, about, features, how-it-works, login, register,
+│   │   │                        # citizendashboard, report, complaints, complaintdetails,
+│   │   │                        # profile, officerdashboard, officercomplaintdetail,
+│   │   │                        # chiefOfficerDashboard, admindashboard, notfound,
+│   │   │                        # community, communityissue
+│   │   ├── services/           # api.js, authservice.js, complaintservice.js, notificationservice.js, communityservice.js
+│   │   └── utils/               # constants.js, formatDateTime.js, helper.js, roleHome.js, community.js
 │   └── package.json
-└── backend/*                 # Flask API — see "Project status" (not yet on main)
+└── backend/
     ├── app.py
     ├── config.py
+    ├── seed.py                  # seeds demo Citizen/Officer/Admin accounts
     ├── database/db.py
-    ├── models/                # user.py, complaint.py
-    ├── routes/                # auth.py, complaints.py, officers.py, admin.py
-    ├── services/              # ai_service.py, auth_service.py, complaint_service.py
-    └── utils/                 # jwt_helper.py, validators.py
+    ├── models/                  # user.py, complaint.py, civic_issue.py, notification.py, community.py,
+    │                             # work_update.py, resolution_review.py
+    ├── routes/                  # auth.py, complaints.py, officers.py, admin.py, notifications.py, community.py,
+    │                             # resolution_review.py
+    ├── services/                # ai_service.py, auth_service.py, complaint_service.py, issue_clustering.py,
+    │                             # community_service.py, community_identity.py, impact_score_service.py
+    ├── utils/                   # jwt_helper.py, time_helper.py, validators.py
+    └── tests/                   # pytest suite (133 tests: test_work_updates.py, test_resolution_review.py, test_community.py, etc.)
 ```
-`*` = only present on feature branches, not on `main`.
 
 ## Getting started
 
 ### Prerequisites
 - Node.js 18+ and npm
-- Python 3.10+ (for the backend, once you check out a branch that includes it)
+- Python 3.10+
 - A Google Gemini API key (for AI-powered complaint analysis)
 
-### Frontend (available on `main`)
+### Quick start (Windows)
 
-```bash
-git clone https://github.com/ishaan77-op/civicpulse-ai.git
-cd civicpulse-ai/frontend
-npm install
-npm run dev
+```bat
+setup.bat    :: once per machine: venv, pip/npm installs, backend\.env, demo users
+start.bat    :: every time: starts backend + frontend and opens the browser
 ```
 
-This runs the Vite dev server. Note that on `main` today, `App.jsx` still shows the default Vite/React starter page — the actual CivicPulse pages, routes, and API wiring live on `feature/frontend-routing` and `feature/member4-integration-maps`.
+`setup.bat` seeds these demo accounts:
 
-### Backend (currently only on feature branches, e.g. `ai-engine`)
+| Role | Email | Password | Access / Dashboard |
+|---|---|---|---|
+| Citizen | citizen@example.com | password123 | Citizen Dashboard (`/dashboard`), Report (`/report`), Community (`/community`) |
+| Officer | officer@example.com | officer123 | Officer Hub (`/officer`), Complaint Detail & Evidence (`/officer/complaints/:id`) |
+| Chief Officer | chief@example.com | chief123 | Resolution Review Queue (`/chief-officer`) |
+| Admin | admin@example.com | admin123 | Admin Intelligence (`/admin`), Officer Hub (`/officer`) |
+
+Keep the project outside OneDrive/Dropbox-synced folders — sync conflicts silently replace files with stale copies (`name-COMPUTERNAME.ext`). Use git to move work between machines.
+
+### Backend (macOS/Linux/manual setup)
 
 ```bash
-git checkout ai-engine
+git checkout level1-integration
 cd backend
 python -m venv venv
 source venv/bin/activate   # venv\Scripts\activate on Windows
 pip install -r requirements.txt
-```
-
-Create a `backend/.env` file with:
-
-```
-GEMINI_API_KEY=your_gemini_api_key
-```
-
-Run the API:
-
-```bash
+cp .env.example .env       # then fill in SECRET_KEY, JWT_SECRET_KEY, GEMINI_API_KEY
 python app.py
 ```
 
-This starts Flask on `http://127.0.0.1:5000`, creates the SQLite database (`civicpulse.db`) on first run, and exposes the API under `/api/...`.
+This starts Flask on `http://127.0.0.1:5001` (override with `PORT`), creates the SQLite database (`instance/civicpulse.db`) on first run, and exposes the API under `/api/...`. `config.py` requires `SECRET_KEY` and `JWT_SECRET_KEY` to be set via environment — it raises at startup if they're missing, it does not fall back to a hardcoded default.
 
-> `config.py` currently hardcodes `SECRET_KEY` and `JWT_SECRET_KEY` for local development — swap these for environment variables before deploying anywhere public.
+Optionally seed demo accounts (Citizen `citizen@example.com`, Officer `officer@example.com`, Chief Officer `chief@example.com`, Admin `admin@example.com`):
+
+```bash
+python seed.py
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Vite proxies `/api` and `/uploads` to `http://127.0.0.1:5001` (see `vite.config.js`), so run the backend first. The dev server serves over HTTPS when a local mkcert certificate is present under `frontend/.cert/` — this is needed for browser camera/geolocation APIs to work when testing over a LAN IP — and falls back to plain HTTP if no cert exists.
+
+### Tests
+
+```bash
+cd backend
+source venv/bin/activate
+pytest -q   # 133 automated tests covering auth, complaints, clustering, community, field updates, and resolution reviews
+```
 
 ## API overview
 
-*(from the `backend-*` and `feature/frontend-routing` branches)*
-
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
-| POST | `/api/auth/register` | Create an account | – |
+| POST | `/api/auth/register` | Create a Citizen account | – |
 | POST | `/api/auth/login` | Log in, receive a JWT | – |
 | GET | `/api/auth/profile` | Get the current user | JWT |
-| POST | `/api/complaints/` | Submit a complaint (+ optional image), triggers AI analysis | JWT |
+| POST | `/api/complaints/` | Submit a complaint (title, description, location, photo), triggers AI analysis | JWT (Citizen) |
 | GET | `/api/complaints/` | List the current user's complaints | JWT |
 | GET | `/api/complaints/<id>` | Get one complaint (own, or any as Officer/Admin) | JWT |
 | PUT | `/api/complaints/<id>` | Edit a complaint's own fields | JWT |
-| PUT | `/api/complaints/<id>/status` | Update status: Pending / In Progress / Resolved | JWT (Officer/Admin) |
+| PUT | `/api/complaints/<id>/status` | Update status: Pending / In Progress | JWT (Officer/Admin) |
+| PUT | `/api/complaints/<id>/reject` | Reject a complaint as out-of-scope, with reason | JWT (Officer/Admin) |
+| PUT | `/api/complaints/<id>/reopen-rejection` | Reopen a previously rejected complaint | JWT (Officer/Admin) |
 | GET | `/api/officers/complaints` | Filterable complaint queue | JWT (Officer/Admin) |
+| POST | `/api/officers/complaints/<id>/work-updates` | Record field-work progress note, photo, GPS (status: Pending / In Progress) | JWT (Officer/Admin) |
+| GET | `/api/officers/complaints/<id>/work-updates` | List field-work updates for a complaint | JWT (Officer/Admin) |
+| POST | `/api/officers/complaints/<id>/resolution-review` | Submit final-resolution evidence for review (status → Pending Review) | JWT (Officer/Admin) |
+| GET | `/api/officers/complaints/<id>/resolution-review` | Get latest resolution review for a complaint | JWT (Officer/Chief Officer/Admin) |
+| GET | `/api/chief-officer/resolution-queue` | List complaints awaiting final resolution approval | JWT (Chief Officer) |
+| PUT | `/api/chief-officer/resolution-reviews/<id>/decide` | Approve (status → Resolved) or reject (status → In Progress) with reason | JWT (Chief Officer) |
+| GET | `/api/officers/heatmap` | Location + weight data for the damage heatmap | JWT (Officer/Admin) |
 | GET | `/api/officers/stats` | Quick status counts | JWT (Officer/Admin) |
+| GET | `/api/officers/spam` | Spam/misreport review queue | JWT (Officer/Admin) |
+| PUT | `/api/officers/spam/<id>/review` | Confirm or dismiss an AI spam flag | JWT (Officer/Admin) |
+| PUT | `/api/officers/spam/<id>/reopen` | Reopen a spam decision | JWT (Officer/Admin) |
+| GET | `/api/officers/issues` | List clustered civic issues | JWT (Officer/Admin) |
+| GET | `/api/officers/issues/<id>/complaints` | List complaints within a cluster | JWT (Officer/Admin) |
+| PUT | `/api/officers/issues/<id>/status` | Update a cluster's overall status | JWT (Officer/Admin) |
 | GET | `/api/admin/analytics` | Platform-wide analytics and breakdowns | JWT (Admin) |
 | GET | `/api/admin/users` | List all users | JWT (Admin) |
-| PUT | `/api/admin/users/<id>/role` | Change a user's role | JWT (Admin) |
+| PUT | `/api/admin/users/<id>/role` | Change a user's role (Citizen / Officer / Chief Officer / Admin) / suspend | JWT (Admin) |
+| GET | `/api/notifications/` | List the current user's notifications | JWT |
+| PUT | `/api/notifications/<id>/read` | Mark a notification read | JWT |
+| GET | `/api/community/feed` | Public civic-issue feed (recent / trending / nearby / priority) | JWT |
+| GET | `/api/community/issues/<id>` | Issue detail with community snapshot, evidence, timeline | JWT |
+| POST | `/api/community/issues/<id>/support` | Support an issue (citizen only) | JWT (Citizen) |
+| DELETE | `/api/community/issues/<id>/support` | Remove support | JWT (Citizen) |
+| POST | `/api/community/issues/<id>/verify` | Verify an issue's current state (citizen only) | JWT (Citizen) |
+| DELETE | `/api/community/issues/<id>/verify` | Withdraw a verification | JWT (Citizen) |
+| GET | `/api/community/issues/<id>/comments` | List public comments on an issue | JWT |
+| POST | `/api/community/issues/<id>/comments` | Post a comment | JWT |
+| PUT | `/api/community/comments/<id>` | Edit own comment | JWT |
+| DELETE | `/api/community/comments/<id>` | Soft-delete own comment | JWT |
+| POST | `/api/community/comments/<id>/report` | Report another citizen's comment | JWT |
+| GET | `/api/community/me/impact` | Current user's impact score, stats, and breakdown | JWT (Citizen) |
+| GET | `/api/community/me/activity` | Current user's recent impact-score events | JWT (Citizen) |
+| GET | `/api/community/moderation/comments` | Comment moderation queue | JWT (Officer/Admin) |
+| PUT | `/api/community/moderation/comments/<id>` | Remove or restore a flagged comment | JWT (Officer/Admin) |
+| GET | `/api/community/issues/<id>/intelligence` | Per-issue community signal for staff | JWT (Officer/Admin) |
+| GET | `/api/community/analytics` | Platform-wide community engagement analytics | JWT (Admin) |
+| GET | `/api/health` | Health check | – |
+| GET | `/uploads/<filename>` | Serve an uploaded complaint photo | – |
 
-A full `docs/api.md` reference is planned but currently empty.
+## Known limitations
+
+- **Photo submission is camera-only.** `CameraCapture.jsx` calls the camera API directly with no file-upload fallback, so the report flow is unusable on a device/browser that denies or lacks camera access.
+- **No retry on transient Gemini errors.** A `503` ("model overloaded") from Gemini currently surfaces as a hard failure with no retry.
+- **Open CORS.** `CORS(app)` in `app.py` currently allows all origins; tighten this before any public deployment.
 
 ## Roadmap
 
-- [ ] Merge `feature/user-model`, `backend-auth`, `backend-complaints`, and `ai-engine` into `main` so the backend actually ships
-- [ ] Merge `feature/frontend-routing` and `feature/member4-integration-maps` for a working, routed frontend
-- [ ] Replace the placeholder Vite starter page in `App.jsx` on `main`
-- [ ] Fill in `docs/requirements.md`, `docs/api.md`, `docs/database.md`
-- [ ] Move hardcoded secrets in `backend/config.py` to environment variables
-- [ ] Expand automated test coverage (a start exists in `backend/tests/`)
+- [x] **Feature 1: Officer Field-Work Updates & Evidence Logging** (notes, photos, GPS, server-timestamped work log)
+- [x] **Feature 2: Chief Officer Review & Final Resolution Verification** (dedicated queue, approvals, rejections with feedback, audit protection)
+- [ ] Merge `level1-integration` into `main`
+- [ ] Confirm the camera-only photo requirement is intentional, or add a fallback
+- [ ] Add Gemini failure handling (a transient `503` from the model currently surfaces as a hard submission failure)
+- [ ] Reseed/clean leftover test data (Playwright/manual test complaints and users) before any live demo
+- [ ] Lightweight CI (run `pytest` + `npm run build` on push)
+- [ ] Tighter CORS configuration for a real deployment
+- [ ] Build out the rest of Level 2 (community features) beyond the current support/verify/comment/impact-score/moderation slice
+
+Explicitly deferred beyond Level 1/initial Level 2: heatmap polish, RAG, Redis, custom-trained AI, async AI processing, Docker, full production CI/CD, production secrets infrastructure, database migration infrastructure.
 
 ## Contributing
 
-This is a small team project (branch names like `feature/member4-integration-maps` reflect per-member feature branches). If you're contributing:
-
-1. Branch from `main` using the existing convention (`feature/<name>`, `backend-<area>`, etc.)
-2. Keep AI prompt logic in `backend/services/ai_service.py` and secrets out of version control (`.env` is already gitignored)
-3. Open a PR into `main` once your feature branch is stable
+1. Branch from `level1-integration` (not `main`, until it's merged there)
+2. Keep AI prompt logic in `backend/services/ai_service.py` and secrets out of version control (`.env` is gitignored; copy `backend/.env.example`)
+3. Run `pytest` (backend) and `npm run build` (frontend) before opening a PR
 
 ## License
 
