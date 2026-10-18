@@ -1,5 +1,5 @@
-from datetime import datetime
 from database.db import db
+from utils.time_helper import utc_now
 
 class User(db.Model):
     __tablename__ = "users"
@@ -14,7 +14,11 @@ class User(db.Model):
 
     role = db.Column(db.String(20), default="Citizen")
 
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    spam_count = db.Column(db.Integer, nullable=False, default=0)
+
+    is_suspended = db.Column(db.Boolean, nullable=False, default=False)
+
+    created_at = db.Column(db.DateTime, default=utc_now)
 
     def __repr__(self):
         return f"<User {self.email}>"
