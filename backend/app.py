@@ -6,7 +6,7 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from werkzeug.exceptions import HTTPException
 
-from config import Config
+from config import Config, ConfigurationError, LOOPBACK_HOSTS, resolve_server_options
 from database.db import db
 from models.user import User
 from models.complaint import Complaint
@@ -313,6 +313,13 @@ app.register_blueprint(notification_bp, url_prefix="/api/notifications")
 app.register_blueprint(community_bp, url_prefix="/api/community")
 
 
+@app.errorhandler(413)
+def handle_request_too_large(error):
+    return jsonify({
+        "message": f"Upload is too large. The maximum photo size is {app.config['MAX_UPLOAD_BYTES'] // (1024 * 1024)} MB."
+    }), 413
+
+
 @app.errorhandler(HTTPException)
 def handle_http_exception(error):
     return jsonify({"message": error.description or error.name}), error.code
@@ -326,8 +333,7 @@ def handle_unexpected_exception(error):
 
 @app.route("/uploads/<path:filename>")
 def serve_upload(filename):
-    upload_folder = os.path.join(os.path.dirname(__file__), "uploads")
-    return send_from_directory(upload_folder, filename)
+    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
 
 
 @app.route("/api/health")
@@ -343,5 +349,16 @@ def home():
 
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 5001))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    # Defaults: 127.0.0.1, debug off. See resolve_server_options in config.py.
+    try:
+        host, port, debug = resolve_server_options(os.environ)
+    except ConfigurationError as error:
+        raise SystemExit(f"Configuration error: {error}")
+
+    if host not in LOOPBACK_HOSTS:
+        print(
+            f"WARNING: listening on {host}:{port} - the API is reachable from "
+            "other devices on your network."
+        )
+
+    app.run(host=host, port=port, debug=debug)

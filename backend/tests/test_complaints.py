@@ -1,5 +1,6 @@
 import io
 from unittest.mock import patch
+from tests.helpers import JPEG_BYTES
 
 
 def get_token(client, email, password):
@@ -8,7 +9,7 @@ def get_token(client, email, password):
 
 
 def fake_image():
-    return (io.BytesIO(b"fake-image-bytes"), "photo.jpg")
+    return (io.BytesIO(JPEG_BYTES), "photo.jpg")
 
 
 @patch("routes.complaints.analyze_complaint")
@@ -159,3 +160,49 @@ def test_officer_status_update_permission(client, citizen_user, officer_user):
     )
     assert officer_status_res.status_code == 200
     assert officer_status_res.get_json()["complaint"]["status"] == "In Progress"
+
+
+@patch("routes.complaints.analyze_complaint")
+def test_uploads_go_to_isolated_folder_and_are_served(mock_ai, app, client, citizen_user):
+    """Regression: tests must never write into the real backend/uploads
+    folder, and the configured UPLOAD_FOLDER must be used for both saving
+    and serving."""
+    import os
+
+    mock_ai.return_value = {
+        "category": "Road Infrastructure",
+        "priority": "High",
+        "department": "Roads Dept",
+        "visual_observation": "Pothole spotted",
+        "summary": "Fix pothole"
+    }
+
+    real_uploads = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uploads"
+    )
+    upload_folder = app.config["UPLOAD_FOLDER"]
+    assert os.path.realpath(upload_folder) != os.path.realpath(real_uploads)
+
+    token = get_token(client, "citizen@example.com", "password123")
+    res = client.post(
+        "/api/complaints/",
+        data={
+            "title": "Pothole",
+            "description": "Deep hole",
+            "latitude": "20.011",
+            "longitude": "73.790",
+            "image": fake_image()
+        },
+        content_type="multipart/form-data",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert res.status_code == 201
+
+    image_url = res.get_json()["complaint"]["image_url"]
+    filename = image_url[len("/uploads/"):]
+    assert os.path.exists(os.path.join(upload_folder, filename))
+    assert not os.path.exists(os.path.join(real_uploads, filename))
+
+    served = client.get(image_url)
+    assert served.status_code == 200
+    assert served.data == JPEG_BYTES

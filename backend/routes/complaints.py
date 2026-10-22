@@ -1,9 +1,8 @@
 import os
 import uuid
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, current_app, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from werkzeug.utils import secure_filename
 
 from database.db import db
 from models.complaint import Complaint
@@ -14,6 +13,7 @@ from services.issue_clustering import get_or_create_issue_for_complaint
 from services import community_service as community
 from services import impact_score_service as impact
 from utils.time_helper import to_iso8601, utc_now
+from utils.upload_validation import UploadError, save_upload, validate_image_upload
 
 
 complaint_bp = Blueprint("complaint", __name__)
@@ -143,15 +143,17 @@ def create_complaint():
             "message": "A camera photo of the issue is required"
         }), 400
 
-    original_filename = secure_filename(image.filename)
+    try:
+        original_filename = validate_image_upload(
+            image, current_app.config["MAX_UPLOAD_BYTES"]
+        )
+    except UploadError as upload_error:
+        return jsonify({"message": upload_error.message}), upload_error.status_code
+
     unique_filename = f"{uuid.uuid4().hex}_{original_filename}"
-    upload_folder = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)),
-        "uploads"
+    image_path = save_upload(
+        image, current_app.config["UPLOAD_FOLDER"], unique_filename
     )
-    os.makedirs(upload_folder, exist_ok=True)
-    image_path = os.path.join(upload_folder, unique_filename)
-    image.save(image_path)
 
     try:
         ai_result = analyze_complaint(
@@ -160,13 +162,14 @@ def create_complaint():
             location,
             image_path
         )
-    except Exception as e:
-        print("AI ANALYSIS ERROR:", str(e))
+    except Exception:
+        # Details go to the server log only; never echo provider/internal
+        # error text (which can include URLs or request details) to clients.
+        current_app.logger.exception("AI analysis failed for a new complaint")
         if image_path and os.path.exists(image_path):
             os.remove(image_path)
         return jsonify({
-            "message": "AI analysis failed",
-            "error": str(e)
+            "message": "AI analysis failed"
         }), 500
 
     # AI-detected likely mismatch/spam signal. Only ever set from a
@@ -201,20 +204,27 @@ def create_complaint():
     # complaints. It never rejects, flags, punishes, suspends, or deletes
     # anything, and never touches spam_count - that stays a fully separate,
     # human-reviewed process.
-    issue = get_or_create_issue_for_complaint(
-        category=complaint.category,
-        latitude=latitude,
-        longitude=longitude,
-        ai_summary=complaint.ai_summary,
-        description=description,
-        location_label=location
-    )
-    db.session.add(issue)
-    db.session.flush()
-    complaint.issue_id = issue.id
+    try:
+        issue = get_or_create_issue_for_complaint(
+            category=complaint.category,
+            latitude=latitude,
+            longitude=longitude,
+            ai_summary=complaint.ai_summary,
+            description=description,
+            location_label=location
+        )
+        db.session.add(issue)
+        db.session.flush()
+        complaint.issue_id = issue.id
 
-    db.session.add(complaint)
-    db.session.commit()
+        db.session.add(complaint)
+        db.session.commit()
+    except Exception:
+        # Don't leave an orphaned photo behind if the complaint never saved.
+        db.session.rollback()
+        if os.path.exists(image_path):
+            os.remove(image_path)
+        raise
 
     # Level 2: Community Impact + "your report joined an existing issue"
     # notification. Both are no-ops for an AI-flagged report until a human
@@ -224,9 +234,9 @@ def create_complaint():
         impact.on_complaint_validated(complaint)
         community.notify_complaint_grouped(complaint)
         db.session.commit()
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        print("COMMUNITY HOOK ERROR:", str(e))
+        current_app.logger.exception("Community hook failed after complaint was saved")
 
     return jsonify({
         "message": "Complaint created successfully",

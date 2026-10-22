@@ -2,6 +2,7 @@ import io
 from unittest.mock import patch
 
 from models.notification import Notification
+from tests.helpers import JPEG_BYTES
 
 
 def get_token(client, email, password):
@@ -10,7 +11,7 @@ def get_token(client, email, password):
 
 
 def fake_image():
-    return (io.BytesIO(b"fake-image-bytes"), "photo.jpg")
+    return (io.BytesIO(JPEG_BYTES), "photo.jpg")
 
 
 SPAM_AI_RESULT = {

@@ -21,7 +21,7 @@ The pilot location baked into the map component is **Nashik, India**, though the
 
 This branch (`level1-integration`) has the full application merged and working end-to-end: Flask API, JWT auth, the Gemini AI analysis engine, the map picker, and the Citizen / Officer / Admin dashboards. `main` still reflects an earlier frontend-only scaffold — check out `level1-integration` (or whichever branch has since replaced it as the integration target) to run the real app.
 
-Backend test suite: 62 tests, all passing (`pytest` in `backend/`).
+Backend test suite: 138 tests, all passing (`pytest` in `backend/`).
 
 ## Key features
 
@@ -63,7 +63,7 @@ Backend test suite: 62 tests, all passing (`pytest` in `backend/`).
 - Flask-SQLAlchemy (SQLite by default) for User, Complaint, and Notification models
 - Flask-JWT-Extended for authentication, bcrypt for password hashing
 - `google-genai` (Gemini) for AI complaint analysis
-- pytest-based test suite (`backend/tests/`, 62 tests)
+- pytest-based test suite (`backend/tests/`, 138 tests)
 
 ## Repository structure
 
@@ -88,7 +88,7 @@ civicpulse-ai/
     ├── routes/                 # auth.py, complaints.py, officers.py, admin.py, notifications.py
     ├── services/                # ai_service.py, auth_service.py, complaint_service.py
     ├── utils/                   # jwt_helper.py, validators.py
-    └── tests/                    # pytest suite (62 tests)
+    └── tests/                    # pytest suite (138 tests)
 ```
 
 ## Getting started
@@ -120,7 +120,13 @@ pip install -r requirements.txt
 Copy `backend/.env.example` to `backend/.env` and fill in the values (at minimum `GEMINI_API_KEY`):
 
 ```bash
-cp .env.example .env
+cp .env.example .env          # Windows PowerShell: Copy-Item .env.example .env
+```
+
+`.env.example` ships with `APP_ENV=development`, which is what allows `SECRET_KEY` and `JWT_SECRET_KEY` to stay blank locally (insecure built-in development defaults are used, and a warning is logged). **Without `APP_ENV=development` the app treats the environment as production and refuses to start** unless both secrets are set to real, non-default values. Never commit `backend/.env`. Generate real secrets with:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
 Run the API:
@@ -129,7 +135,34 @@ Run the API:
 python app.py
 ```
 
-This starts Flask on `http://127.0.0.1:5001` (override with `PORT`), creates the SQLite database (`backend/instance/civicpulse.db`) on first run, and exposes the API under `/api/...`.
+This starts Flask on `http://127.0.0.1:5001` (this machine only; override the port with `PORT`), creates the SQLite database (`backend/instance/civicpulse.db`) on first run, and exposes the API under `/api/...`. Debug mode is **off** by default. For auto-reload while developing, set `FLASK_DEBUG=1`; it is honoured only when `APP_ENV=development` and `HOST` is a loopback address, and is ignored (with a warning) otherwise.
+
+Complaint photos are validated before they are saved: JPG, PNG or WebP only, content must match the extension, and the size limit is 10 MB (`MAX_UPLOAD_MB`). They are stored in `backend/uploads/` (override with `UPLOAD_FOLDER`).
+
+#### Phone / LAN testing
+
+The Vite dev server proxies `/api` and `/uploads` to the backend on `127.0.0.1`, so for testing from a phone on the same Wi-Fi you normally only need to expose the **frontend**:
+
+```bash
+cd frontend
+npm run dev -- --host
+```
+
+Open the `Network:` URL that Vite prints (for the camera and geolocation APIs the page must be served over HTTPS; see the mkcert note above). The backend can stay on `127.0.0.1`.
+
+Only if a device must reach the Flask API directly, bind it to all interfaces explicitly:
+
+```bash
+# macOS / Linux
+HOST=0.0.0.0 python app.py
+```
+
+```powershell
+# Windows PowerShell
+$env:HOST = "0.0.0.0"; python app.py
+```
+
+This makes the API reachable by anyone on your network and the app prints a warning. Debug mode is never enabled on a non-loopback `HOST`. Unset it again afterwards (`Remove-Item Env:HOST`).
 
 ### Tests
 
@@ -174,7 +207,8 @@ A fuller reference lives in `docs/api.md`.
 - **Photo submission is camera-only.** `CameraCapture.jsx` calls the camera API directly with no file-upload fallback, so the report flow is unusable on a device/browser that denies or lacks camera access. Confirm this is the desired behavior before a live demo.
 - **No retry on transient Gemini errors.** A `503` ("model overloaded") from Gemini currently surfaces as a hard failure with no retry.
 - **Open CORS.** `CORS(app)` in `app.py` currently allows all origins; tighten this before any public deployment.
-- **`SECRET_KEY` / `JWT_SECRET_KEY` fall back to hardcoded dev defaults** in `config.py` if unset in the environment — always set real values outside local dev.
+- **Insecure secret defaults exist for local development only.** `config.py` uses built-in `SECRET_KEY` / `JWT_SECRET_KEY` defaults only when `APP_ENV=development` is set explicitly; in any other environment missing, blank or default secrets stop the app from starting.
+- **JWT access tokens expire after 15 minutes** (Flask-JWT-Extended default; there is no refresh mechanism), and the frontend signs the user out on any `401`.
 
 ## Contributing
 

@@ -6,6 +6,7 @@ from database.db import db
 from models.community import ImpactScoreEvent, IssueComment
 from models.notification import Notification
 from services import impact_score_service as impact
+from tests.helpers import JPEG_BYTES
 
 
 def get_token(client, email, password):
@@ -59,7 +60,7 @@ def submit_complaint(client, token, ai_result=POTHOLE_AI_RESULT, latitude=20.011
                 "latitude": str(latitude),
                 "longitude": str(longitude),
                 "address": "College Road, Nashik, Maharashtra",
-                "image": (io.BytesIO(b"fake-image-bytes"), "photo.jpg"),
+                "image": (io.BytesIO(JPEG_BYTES), "photo.jpg"),
             },
             content_type="multipart/form-data",
             headers=auth(token),

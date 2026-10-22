@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from utils.time_helper import to_iso8601, utc_now
+from tests.helpers import JPEG_BYTES
 
 
 def get_token(client, email, password):
@@ -11,7 +12,7 @@ def get_token(client, email, password):
 
 
 def fake_image():
-    return (io.BytesIO(b"fake-image-bytes"), "photo.jpg")
+    return (io.BytesIO(JPEG_BYTES), "photo.jpg")
 
 
 AI_RESULT = {
