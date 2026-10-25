@@ -22,6 +22,7 @@ const httpsOptions =
 export default defineConfig({
   plugins: [react()],
   server: {
+    host: true,
     https: httpsOptions,
     proxy: {
       '/api': {

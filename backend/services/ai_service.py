@@ -11,10 +11,16 @@ load_dotenv(os.path.join(_backend_dir, ".env"))
 load_dotenv()
 
 def get_client():
-    api_key = os.getenv("GEMINI_API_KEY")
+    api_key = (os.getenv("GEMINI_API_KEY") or "").strip()
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY not found in .env")
-    return genai.Client(api_key=api_key)
+    return genai.Client(
+        api_key=api_key,
+        http_options=types.HttpOptions(
+            timeout=30_000,  # 30s timeout
+            retry_options=types.HttpRetryOptions(attempts=2, initial_delay=1.0, max_delay=3.0),
+        ),
+    )
 
 
 def _clean_json_text(text: str) -> str:
@@ -130,10 +136,12 @@ Rules:
     config = types.GenerateContentConfig(
         response_mime_type="application/json",
         temperature=0.2,
+        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
     )
 
+    model = (os.getenv("GEMINI_MODEL") or "gemini-3.6-flash").strip() or "gemini-3.6-flash"
     response = client.models.generate_content(
-        model=os.getenv("GEMINI_MODEL", "gemini-3.6-flash"),
+        model=model,
         contents=contents,
         config=config,
     )
