@@ -4,6 +4,7 @@ import AppShell from '../components/appshell.jsx'
 import { apiErrorMessage } from '../services/api.js'
 import { getComplaint, updateComplaint } from '../services/complaintservice.js'
 import { formatDateTime } from '../utils/formatDateTime.js'
+import BeforeAfterComparison from '../components/BeforeAfterComparison.jsx'
 
 const categories = [
   'Road Infrastructure',
@@ -333,6 +334,8 @@ export default function ComplaintDetails() {
           </button>
         </form>
       </section>
+
+      <BeforeAfterComparison complaintId={id} />
     </AppShell>
   )
 }

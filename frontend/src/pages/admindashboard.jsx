@@ -5,6 +5,7 @@ import SpamReviewList from '../components/SpamReviewList.jsx'
 import IssueClusterList from '../components/IssueClusterList.jsx'
 import CommunityAnalytics from '../components/CommunityAnalytics.jsx'
 import CommunityModerationList from '../components/CommunityModerationList.jsx'
+import WardManagement from '../components/WardManagement.jsx'
 import { apiErrorMessage } from '../services/api.js'
 import { getAdminAnalytics, getAdminUsers, getHeatmapData, updateUserRole } from '../services/complaintservice.js'
 
@@ -121,6 +122,12 @@ export default function AdminDashboard() {
           onClick={() => setActiveTab('moderation')}
         >
           💬 Community Moderation
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'wards' ? 'active' : ''}`}
+          onClick={() => setActiveTab('wards')}
+        >
+          🏘️ Wards
         </button>
       </div>
 
@@ -253,6 +260,8 @@ export default function AdminDashboard() {
         <IssueClusterList />
       ) : activeTab === 'community' ? (
         <CommunityAnalytics />
+      ) : activeTab === 'wards' ? (
+        <WardManagement users={users} />
       ) : activeTab === 'moderation' ? (
         <CommunityModerationList />
       ) : (

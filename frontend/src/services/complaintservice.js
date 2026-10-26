@@ -61,3 +61,8 @@ export const getAdminUsers = () =>
 
 export const updateUserRole = (userId, role) =>
   api.put(`/admin/users/${userId}/role`, { role })
+
+// Citizen-safe before/after progress for one complaint:
+// { evidence: { state, issue_status, before, work_submitted_at, returned_at, approved_at, after } }
+export const getResolutionEvidence = (id) =>
+  api.get(`/complaints/${id}/resolution-evidence`)

@@ -3,6 +3,8 @@ import { apiErrorMessage } from '../services/api.js'
 import { getIssues, updateIssueStatus } from '../services/complaintservice.js'
 import { Link } from 'react-router-dom'
 import { formatDateTime as formatDate } from '../utils/formatDateTime.js'
+import { statusClass, statusOptions } from '../utils/resolution.js'
+import IssueWorkPanel from './IssueWorkPanel.jsx'
 
 function IssueClusterList() {
   const [issues, setIssues] = useState([])
@@ -11,6 +13,7 @@ function IssueClusterList() {
   const [error, setError] = useState('')
   const [actionError, setActionError] = useState('')
   const [updatingId, setUpdatingId] = useState(null)
+  const [openPanelId, setOpenPanelId] = useState(null)
 
   const fetchIssues = useCallback(async () => {
     try {
@@ -56,6 +59,7 @@ function IssueClusterList() {
           <option value="">All Statuses</option>
           <option value="Pending">Pending</option>
           <option value="In Progress">In Progress</option>
+          <option value="Pending Review">Pending Review</option>
           <option value="Resolved">Resolved</option>
         </select>
       </div>
@@ -94,11 +98,12 @@ function IssueClusterList() {
                     value={issue.status || 'Pending'}
                     onChange={(e) => handleStatusChange(issue.id, e.target.value)}
                     disabled={updatingId === issue.id}
-                    className={`status-select status-select-${(issue.status || 'Pending').toLowerCase().replace(' ', '-')}`}
+                    className={`status-select ${statusClass(issue.status)}`}
+                    title="Resolved is set only by Chief Officer approval"
                   >
-                    <option value="Pending">🟡 Pending</option>
-                    <option value="In Progress">🔵 In Progress</option>
-                    <option value="Resolved">🟢 Resolved</option>
+                    {statusOptions(issue.status || 'Pending').map((option) => (
+                      <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -122,6 +127,16 @@ function IssueClusterList() {
                   <Link className="text-link" to={`/community/issues/${issue.id}`}>Open community thread →</Link>
                 </div>
               )}
+
+              <button
+                type="button"
+                className="button issue-work-toggle"
+                aria-expanded={openPanelId === issue.id}
+                onClick={() => setOpenPanelId(openPanelId === issue.id ? null : issue.id)}
+              >
+                {openPanelId === issue.id ? 'Hide field work & resolution' : 'Field work & resolution'}
+              </button>
+              {openPanelId === issue.id && <IssueWorkPanel issueId={issue.id} onChanged={fetchIssues} />}
             </article>
           ))}
         </div>

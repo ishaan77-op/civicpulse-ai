@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useContext, useEffect, useState } from 'react'
 import AppShell from '../components/appshell.jsx'
 import HeatmapView from '../components/HeatmapView.jsx'
 import SpamReviewList from '../components/SpamReviewList.jsx'
 import IssueClusterList from '../components/IssueClusterList.jsx'
 import RejectedComplaintsList from '../components/RejectedComplaintsList.jsx'
 import CommunityModerationList from '../components/CommunityModerationList.jsx'
+import OfficerPerformancePanel from '../components/OfficerPerformancePanel.jsx'
+import { AuthContext } from '../context/authcontextvalue.jsx'
 import { apiErrorMessage } from '../services/api.js'
 import { getHeatmapData, getOfficerComplaints, getOfficerStats, rejectComplaint, updateComplaintStatus } from '../services/complaintservice.js'
 import { formatDateTime as formatDate } from '../utils/formatDateTime.js'
+import { statusClass, statusOptions } from '../utils/resolution.js'
 
 const REJECTION_REASONS = [
   'Private Property',
@@ -18,6 +21,7 @@ const REJECTION_REASONS = [
 ]
 
 export default function OfficerDashboard() {
+  const { user } = useContext(AuthContext)
   const [complaints, setComplaints] = useState([])
   const [stats, setStats] = useState({ total_complaints: 0, pending: 0, in_progress: 0, resolved: 0 })
   const [statusFilter, setStatusFilter] = useState('')
@@ -165,7 +169,7 @@ export default function OfficerDashboard() {
       </section>
 
       {/* View Toggle */}
-      <div className="admin-tabs">
+      <div className="admin-tabs resolution-tabs">
         <button
           className={`tab-btn ${view === 'list' ? 'active' : ''}`}
           onClick={() => setView('list')}
@@ -202,6 +206,14 @@ export default function OfficerDashboard() {
         >
           💬 Community Moderation
         </button>
+        {user?.role === 'Officer' && (
+          <button
+            className={`tab-btn ${view === 'performance' ? 'active' : ''}`}
+            onClick={() => setView('performance')}
+          >
+            ⭐ My ratings &amp; corrections
+          </button>
+        )}
       </div>
 
       {view === 'heatmap' ? (
@@ -225,6 +237,8 @@ export default function OfficerDashboard() {
         <RejectedComplaintsList onDecision={() => { fetchData(); fetchHeatmap() }} />
       ) : view === 'moderation' ? (
         <CommunityModerationList />
+      ) : view === 'performance' ? (
+        <OfficerPerformancePanel />
       ) : (
       <>
       {/* Control / Filter Bar */}
@@ -297,11 +311,12 @@ export default function OfficerDashboard() {
                     value={item.status || 'Pending'}
                     onChange={(e) => handleStatusChange(item.id, e.target.value)}
                     disabled={updatingId === item.id}
-                    className={`status-select status-select-${(item.status || 'Pending').toLowerCase().replace(' ', '-')}`}
+                    className={`status-select ${statusClass(item.status)}`}
+                    title="Resolved is set only by Chief Officer approval of the issue"
                   >
-                    <option value="Pending">🟡 Pending</option>
-                    <option value="In Progress">🔵 In Progress</option>
-                    <option value="Resolved">🟢 Resolved</option>
+                    {statusOptions(item.status || 'Pending').map((option) => (
+                      <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>
+                    ))}
                   </select>
                   <button
                     type="button"

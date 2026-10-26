@@ -16,6 +16,7 @@ import AdminDashboard from './pages/admindashboard.jsx'
 import NotFound from './pages/notfound.jsx'
 import Community from './pages/community.jsx'
 import CommunityIssue from './pages/communityissue.jsx'
+import ChiefOfficerDashboard from './pages/chiefofficerdashboard.jsx'
 
 function App() {
   return (
@@ -39,6 +40,9 @@ function App() {
           </Route>
           <Route element={<ProtectedRoute allowedRoles={['Officer', 'Admin']} />}>
             <Route path="/officer" element={<OfficerDashboard />} />
+          </Route>
+          <Route element={<ProtectedRoute allowedRoles={['Chief Officer']} />}>
+            <Route path="/chief-officer" element={<ChiefOfficerDashboard />} />
           </Route>
           <Route element={<ProtectedRoute allowedRoles={['Admin']} />}>
             <Route path="/admin" element={<AdminDashboard />} />

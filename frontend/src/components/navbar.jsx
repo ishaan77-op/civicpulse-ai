@@ -35,6 +35,9 @@ export default function Navbar() {
                 {(user?.role === 'Officer' || user?.role === 'Admin') && (
                   <Link className="text-link" to="/officer" onClick={closeMenu}>Officer</Link>
                 )}
+                {user?.role === 'Chief Officer' && (
+                  <Link className="text-link" to="/chief-officer" onClick={closeMenu}>Resolution Review</Link>
+                )}
                 {user?.role === 'Admin' && (
                   <Link className="text-link" to="/admin" onClick={closeMenu}>Admin</Link>
                 )}
