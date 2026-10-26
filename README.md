@@ -84,7 +84,18 @@ Complaint-to-resolution flow:
 4. The Chief Officer may rate the approved work 1-5 stars. A 1 or 2 star rating needs a written explanation and opens a **corrective follow-up**. Ratings are append-only: a revision never deletes the original, and never closes, moves or deletes an existing follow-up.
 5. The Chief Officer assigns the follow-up to an Officer, who submits a correction (note, optional photo). The Chief Officer verifies and closes it, or returns it for more work. Closing a follow-up does not change the issue's resolution status.
 
-Correction photos are staff-only evidence. They are stored outside the public upload folder and served only to the assigned Officer and Chief Officers through authenticated API endpoints.
+Photo access (as implemented):
+
+| Photo | Stored in | Who can read it |
+|---|---|---|
+| Citizen complaint photo | public `UPLOAD_FOLDER` | Anyone with the link, via `/uploads/<name>` (no authentication) |
+| Officer field-work photo | `PRIVATE_UPLOAD_FOLDER` | Officer, Admin and Chief Officer, via an authenticated endpoint |
+| Completion-evidence photo | `PRIVATE_UPLOAD_FOLDER` | Staff in any state; the reporting citizen only after the Chief Officer approves, via `/api/complaints/<id>/resolution-evidence/after-image` |
+| Correction photo | `PRIVATE_UPLOAD_FOLDER` | The Chief Officer and the assigned Officer |
+
+`/uploads` refuses to serve any file referenced by a field-work update, completion review or correction, and sends `X-Content-Type-Options: nosniff`. Photos uploaded before this change may still sit in the public folder; they are not moved automatically (see [docs/database.md](docs/database.md), "Photo storage and the legacy-photo migration tool").
+
+Role safeguards: the last active Admin cannot be demoted, every Admin role change is recorded in an append-only `role_changes` table, and a Chief Officer cannot rate work they submitted themselves (including work submitted before their promotion). Chief Officer assignment is Admin-only through the API; the Admin screen does not offer it.
 
 ## Tech stack
 
@@ -191,14 +202,14 @@ Settings come from `backend/.env` (copy `backend/.env.example`; placeholders onl
 | `GEMINI_API_KEY` | Google Gemini key for AI analysis (`your-gemini-api-key`) | none |
 | `GEMINI_MODEL` | Gemini model name | `gemini-3.6-flash` |
 | `DATABASE_URL` | SQLAlchemy URL | SQLite at `backend/instance/civicpulse.db` |
-| `UPLOAD_FOLDER` | Public complaint/completion photos | `backend/uploads` |
-| `PRIVATE_UPLOAD_FOLDER` | Staff-only correction photos; must be **outside** `UPLOAD_FOLDER` | `backend/private_uploads` |
+| `UPLOAD_FOLDER` | Public citizen complaint photos (and legacy photos not yet migrated) | `backend/uploads` |
+| `PRIVATE_UPLOAD_FOLDER` | Private staff photos (field-work, completion evidence, corrections); must be **outside** `UPLOAD_FOLDER` | `backend/private_uploads` |
 | `MAX_UPLOAD_MB` | Largest accepted photo | `10` |
 | `HOST`, `PORT`, `FLASK_DEBUG` | Dev server binding and debug (see comments in `.env.example`) | `127.0.0.1`, `5001`, off |
 
 `.env.example` sets `APP_ENV=development`, which is what allows `SECRET_KEY` and `JWT_SECRET_KEY` to stay blank locally (insecure built-in development defaults, with a logged warning). Without it the app treats the environment as production and refuses to start unless both secrets are real, non-default values.
 
-Complaint photos are validated before they are saved: JPG, PNG or WebP only, content must match the extension, and the size limit is 10 MB (`MAX_UPLOAD_MB`). They are stored in `backend/uploads/` (override with `UPLOAD_FOLDER`) and served at `/uploads/<name>` **without authentication** (unguessable names, but anyone with a link can open them). Staff-only correction photos go to `backend/private_uploads/` instead (override with `PRIVATE_UPLOAD_FOLDER`) and are never served by `/uploads`; both folders are gitignored.
+Complaint photos are validated before they are saved: JPG, PNG or WebP only, content must match the extension, and the size limit is 10 MB (`MAX_UPLOAD_MB`). They are stored in `backend/uploads/` (override with `UPLOAD_FOLDER`) and served at `/uploads/<name>` **without authentication** (unguessable names, but anyone with a link can open them). Officer field-work photos, completion-evidence photos and correction photos go to `backend/private_uploads/` instead (override with `PRIVATE_UPLOAD_FOLDER`) and are never served by `/uploads`; both folders are gitignored.
 
 #### Database setup and migrations
 
@@ -221,6 +232,8 @@ npm run dev
 
 Vite proxies `/api` and `/uploads` to `http://127.0.0.1:5001` (see `vite.config.js`), so run the backend first. The dev server serves over HTTPS when a local mkcert certificate is present under `frontend/.cert/` — this is needed for browser camera/geolocation APIs to work when testing over a LAN IP — and falls back to plain HTTP if no cert exists.
 
+Fuller reference: [docs/api.md](docs/api.md) (endpoints), [docs/database.md](docs/database.md) (tables, migrations, photo storage), [docs/requirements.md](docs/requirements.md).
+
 ### Tests, lint and build
 
 ```bash
@@ -240,7 +253,7 @@ The frontend tests cover logic helpers only; there are no component tests, so UI
 ### Safe demo
 
 - Use a **copy** of the database, or a fresh one: set `DATABASE_URL=sqlite:////absolute/path/to/demo.db` (and separate `UPLOAD_FOLDER` / `PRIVATE_UPLOAD_FOLDER` directories) so the demo never writes into data you want to keep. Do not run `backend/seed.py` against a database you care about; read it first, since it creates sample accounts.
-- Create people through the app: register Citizens at `/register`. Officer and Admin roles are granted by an Admin; the first Admin has to be set up by whoever controls the database. The Admin screen offers Citizen / Officer / Admin; the **Chief Officer** role is currently assigned through the Admin API (`PUT /api/admin/users/<id>/role` with `{"role": "Chief Officer"}`) and the choice of who may assign it is still an open policy decision (see Known limitations).
+- Create people through the app: register Citizens at `/register`. Officer and Admin roles are granted by an Admin; the first Admin has to be set up by whoever controls the database. The Admin screen offers Citizen / Officer / Admin; the **Chief Officer** role is currently assigned through the Admin API (`PUT /api/admin/users/<id>/role` with `{"role": "Chief Officer"}`) and only an Admin can do so (a deliberate choice; the Admin screen does not offer it).
 - Walk the flow: citizen reports an issue, Officer submits completed work, Chief Officer approves it and rates it, a low rating opens a follow-up, the Chief Officer assigns it, the Officer submits a correction, the Chief Officer verifies it. Citizens see the before/after evidence on the complaint page.
 - Choose passwords yourself and do not reuse real ones. Never put real credentials, tokens or API keys in screenshots, slides or commits.
 
@@ -298,6 +311,8 @@ The frontend tests cover logic helpers only; there are no component tests, so UI
 | GET | `/api/community/analytics` | Platform-wide community engagement analytics | JWT (Admin) |
 | GET | `/api/health` | Health check | – |
 
+Photo endpoints for staff (all authenticated): `GET /api/issues/<id>/work-updates/<update_id>/image` and `GET /api/issues/<id>/resolution-reviews/<review_id>/image` (Officer / Admin / Chief Officer), and `GET /api/complaints/<id>/resolution-evidence/after-image` (the reporting citizen after approval, or staff).
+
 Ward, supervision and follow-up endpoints (`/api/admin/wards...`, `/api/chief-officer/overview|ratings|approved-work|wards|officers|follow-ups...`, `/api/officers/me/ratings|follow-ups...`) are listed with their roles in the table below; the route files are the reference.
 
 | Area | Endpoints | Who |
@@ -308,21 +323,24 @@ Ward, supervision and follow-up endpoints (`/api/admin/wards...`, `/api/chief-of
 | Officer's own records | `/api/officers/me/ratings`, `/api/officers/me/follow-ups...` | Officer only (own records) |
 | Correction photos | `/api/chief-officer/follow-ups/<id>/events/<event_id>/image`, `/api/officers/me/follow-ups/<id>/events/<event_id>/image` | Chief Officer; the assigned Officer |
 
-| GET | `/uploads/<filename>` | Serve an uploaded complaint or completion photo (public; staff-only correction photos are never served here) | – |
+| GET | `/uploads/<filename>` | Serve a citizen complaint photo (public; private staff photos are never served here) | – |
 
 ## Known limitations
 
 - **Photo submission is camera-only.** `CameraCapture.jsx` calls the camera API directly with no file-upload fallback, so the report flow is unusable on a device/browser that denies or lacks camera access.
 - **No retry on transient Gemini errors.** A `503` ("model overloaded") from Gemini currently surfaces as a hard failure with no retry.
-- **Public photo URLs.** `/uploads/<name>` serves complaint and completion photos without authentication (they are shown to citizens and in the community feed by design). Staff-only correction photos are *not* served there. Staff field-work update photos (`IssueWorkUpdate`) still are, so whether those should also move to authenticated access is an open policy decision.
-- **Ward-level work is not available.** Complaints and issues are not linked to wards, so the app cannot attribute work to a ward and says so instead of showing zeros.
-- **Open policy decisions:** who may assign the Chief Officer role (today any Admin, via the API), the Officer-to-ward cardinality, municipality-wide Officer access, any SLA/overdue thresholds, and whether Admins may ever see ratings.
+- **Public complaint photos.** `/uploads/<name>` serves citizen complaint photos without authentication (they are shown in the community feed by design). Field-work, completion and correction photos uploaded since photos became private are not served there.
+- **Legacy photos are not migrated automatically.** Files uploaded earlier stay in the public folder (the private endpoints still find them, `/uploads` refuses them). Moving them is a deliberate, reversible step with `backend/scripts/private_photo_migration.py`; start with its read-only `report` command. Image metadata (EXIF) is not stripped yet.
+- **Ward mapping is not implemented.** The ward registry stores only a name, code and source: there is no boundary geometry in the repository, and complaints and issues are not linked to wards, so the app draws no wards on the map and shows no ward-level work. Showing wards is a planned follow-up that needs official ward-boundary data (with its source and licence); boundaries will not be approximated.
+- **Open policy decisions:** the Officer-to-ward cardinality, municipality-wide Officer access, any SLA/overdue thresholds, and whether Admins may ever see ratings.
 - **Notifications do not deep-link** to the related work; they say where to look.
 - **Open CORS.** `CORS(app)` in `app.py` currently allows all origins; tighten this before any public deployment.
 
 ## Roadmap
 
-- [ ] Merge the integrated branch into `main` after review
+- [ ] Merge the integrated branch into `main` after team review (PR #1)
+- [ ] Ward mapping in a separate PR, using official ward-boundary data only
+- [ ] Decide when to run the legacy-photo migration and EXIF stripping
 - [ ] Confirm the camera-only photo requirement is intentional, or add a fallback
 - [ ] Add Gemini failure handling (a transient `503` from the model currently surfaces as a hard submission failure)
 - [ ] Reseed/clean leftover test data (Playwright/manual test complaints and users) before any live demo
