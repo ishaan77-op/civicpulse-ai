@@ -242,3 +242,7 @@ yarn-error.log*
 .env.development.local
 .env.production.local
 .env.test.local
+
+# Local dev certs / uploads / db
+frontend/.cert/
+*.pem

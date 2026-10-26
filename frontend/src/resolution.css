@@ -1,0 +1,109 @@
+/* Issue-wide field work and Chief Officer resolution review.
+   Loaded after index.css and community.css (see main.jsx). */
+
+.status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; margin-left: 8px; border-radius: 999px; border: 1px solid transparent; font-size: 12px; font-weight: 800; }
+.status-select-pending-review { background: #f5f3ff; color: #6d28d9; border-color: #ddd6fe; }
+
+.issue-work-panel, .resolution-queue { display: grid; gap: 18px; }
+.issue-work-panel h3, .resolution-evidence h3 { margin: 0 0 8px; font: 800 15px Manrope, sans-serif; color: #0f172a; }
+.resolution-queue > section > h2 { margin: 0 0 8px; font: 800 20px Manrope, sans-serif; }
+.resolution-muted { color: #64748b; font-size: 13px; line-height: 1.5; margin: 0; }
+.resolution-evidence { display: grid; gap: 16px; }
+.resolution-reports { display: grid; gap: 12px; }
+.resolution-report { display: grid; grid-template-columns: 150px 1fr; gap: 14px; padding: 12px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; }
+.resolution-report img, .resolution-final img, .resolution-log img { width: 100%; max-height: 220px; object-fit: cover; border-radius: 10px; border: 1px solid #e2e8f0; }
+.resolution-report figure, .resolution-final { margin: 0; }
+.resolution-report figcaption, .resolution-final figcaption { margin-top: 4px; color: #64748b; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; }
+.resolution-final { max-width: 420px; }
+.resolution-chip { display: inline-block; margin: 4px 6px 0 0; padding: 2px 9px; border-radius: 999px; background: #eef2f7; color: #334155; font-size: 11px; font-weight: 800; }
+.chip-excluded { background: #fef3f2; color: #b42318; }
+.chip-blocked { background: #fffbeb; color: #b45309; }
+.chip-eligible { background: #e7f4e6; color: #1d7433; }
+.resolution-dispositions, .resolution-log { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.resolution-log li { padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; }
+.resolution-log li p { margin: 4px 0 0; font-size: 14px; }
+.resolution-log img { max-width: 260px; margin-top: 8px; }
+
+.resolution-banner { padding: 12px 14px; border-radius: 12px; border: 1px solid; font-size: 14px; }
+.resolution-banner p { margin: 6px 0 0; }
+.banner-pending { background: #f5f3ff; border-color: #ddd6fe; color: #5b21b6; }
+.banner-stale { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.banner-rejected { background: #fef3f2; border-color: #fecdca; color: #b42318; }
+.banner-approved { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
+.resolution-success { margin: 0; padding: 10px 14px; border-radius: 10px; background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; font-size: 14px; font-weight: 700; }
+
+.resolution-form { display: grid; gap: 12px; }
+.resolution-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.resolution-fieldset { border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; display: grid; gap: 10px; }
+.resolution-disposition-row { display: grid; grid-template-columns: minmax(120px, 1fr) 190px minmax(140px, 1.4fr); gap: 10px; align-items: center; }
+.resolution-decision { margin: 12px 0; }
+.resolution-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.resolution-actions .button { width: auto; }
+.resolution-confirm { display: grid; gap: 10px; padding: 12px; border: 1px solid #e2e8f0; border-radius: 12px; background: #f8fafc; }
+.resolution-confirm p { margin: 0; font-size: 14px; }
+.resolution-card details { margin-top: 12px; }
+.resolution-card summary, .issue-work-panel summary { cursor: pointer; font-weight: 800; color: #1d7433; }
+.issue-work-toggle { margin-top: 12px; }
+
+@media (max-width: 640px) {
+  .resolution-report { grid-template-columns: 1fr; }
+  .resolution-form-row, .resolution-disposition-row { grid-template-columns: 1fr; }
+}
+
+/* ---------- Citizen before / after ---------- */
+.ba-section { display: grid; gap: 14px; margin-top: 28px; padding: 20px; border: 1px solid rgba(35, 101, 46, .12); border-radius: 18px; background: rgba(255, 255, 255, .8); }
+.ba-section h2 { margin: 0; font: 800 22px Manrope, sans-serif; color: #0f172a; }
+.ba-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.ba-panel { margin: 0; display: grid; gap: 8px; align-content: start; }
+.ba-panel figcaption { font-size: 13px; color: #475569; }
+.ba-label { display: inline-block; padding: 2px 10px; border-radius: 999px; background: #0f172a; color: #fff; font-size: 11px; font-weight: 800; letter-spacing: .6px; }
+.ba-zoom { position: relative; display: block; width: 100%; padding: 0; border: 1px solid #e2e8f0; border-radius: 14px; background: #f8fafc; overflow: hidden; cursor: zoom-in; }
+.ba-zoom img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+.ba-zoom:focus-visible { outline: 3px solid #e67a26; outline-offset: 2px; }
+.ba-zoom-hint { position: absolute; right: 8px; bottom: 8px; padding: 3px 9px; border-radius: 999px; background: rgba(15, 23, 42, .72); color: #fff; font-size: 11px; font-weight: 700; }
+.ba-empty { display: grid; place-items: center; min-height: 150px; margin: 0; padding: 16px; border: 1px dashed #cbd5e1; border-radius: 14px; background: #f8fafc; color: #64748b; font-size: 14px; text-align: center; }
+.ba-dates { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0; font-size: 14px; }
+.ba-dates dt { color: #64748b; font-weight: 700; }
+.ba-dates dd { margin: 0; }
+.ba-report { padding: 12px 14px; border-radius: 12px; background: #f0fdf4; border: 1px solid #bbf7d0; }
+.ba-report h3 { margin: 0 0 4px; font: 800 15px Manrope, sans-serif; }
+.ba-report p { margin: 0; white-space: pre-wrap; }
+.ba-lightbox { display: grid; gap: 12px; justify-items: center; max-width: min(96vw, 1000px); max-height: 94vh; padding: 14px; border-radius: 16px; background: #fff; }
+.ba-lightbox img { max-width: 100%; max-height: 74vh; object-fit: contain; border-radius: 10px; }
+.ba-lightbox p { margin: 0; color: #475569; font-size: 14px; }
+.ba-lightbox .button { width: auto; }
+@media (max-width: 640px) { .ba-grid { grid-template-columns: 1fr; } .ba-section { padding: 16px; } }
+
+/* ---------- Ratings, follow-ups, supervision ---------- */
+.star-picker { display: flex; gap: 4px; }
+.star-btn { width: 40px; height: 40px; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; color: #cbd5e1; font-size: 22px; cursor: pointer; }
+.star-btn.on { color: #f59e0b; border-color: #fde68a; background: #fffbeb; }
+.star-btn:focus-visible { outline: 3px solid #e67a26; outline-offset: 2px; }
+.resolution-inline { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #475569; }
+.follow-up-status { display: inline-block; padding: 3px 12px; margin: 0 0 6px; font-size: 12px; font-weight: 800; }
+.follow-up-events img { max-width: 220px; margin-top: 8px; border-radius: 10px; }
+.chief-overview h2 { margin: 22px 0 8px; font: 800 20px Manrope, sans-serif; }
+
+.pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 16px 0; font-size: 14px; color: #475569; }
+.pager .button { width: auto; }
+.attention-list { list-style: none; margin: 0 0 18px; padding: 0; display: grid; gap: 8px; }
+.attention-item { width: 100%; text-align: left; padding: 12px 16px; border: 1px solid #fde68a; border-radius: 12px; background: #fffbeb; color: #78350f; font-size: 15px; cursor: pointer; }
+.attention-item:hover { background: #fef3c7; }
+.attention-item:focus-visible { outline: 3px solid #e67a26; outline-offset: 2px; }
+.attention-item strong { font-size: 18px; margin-right: 4px; }
+.rate-evidence { display: grid; gap: 6px; margin-top: 10px; max-width: 460px; }
+.rate-evidence img { width: 100%; max-height: 220px; object-fit: cover; border-radius: 10px; border: 1px solid #e2e8f0; }
+.rate-evidence p { margin: 0; font-size: 14px; }
+.officer-detail { display: grid; gap: 10px; }
+.officer-detail h4 { margin: 14px 0 4px; font: 800 16px Manrope, sans-serif; }
+
+/* Intro line under the Chief Officer / Officer tabs. The shared .dashboard-kicker colour is pale
+   orange for a dark hero and is nearly invisible on these light pages. */
+.resolution-kicker { color: #92400e; text-transform: uppercase; font-size: 11px; font-weight: 800; letter-spacing: 1px; line-height: 1.5; margin: 0 0 10px; }
+.resolution-confirm label { display: grid; gap: 6px; font-size: 13px; font-weight: 700; }
+.resolution-confirm textarea { width: 100%; box-sizing: border-box; }
+
+/* Phone widths: let tab rows wrap and wide tables scroll inside their own box rather than the page. */
+.resolution-tabs { flex-wrap: wrap; }
+.resolution-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.filter-group.resolution-filters { flex-wrap: wrap; }
