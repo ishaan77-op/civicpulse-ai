@@ -12,8 +12,10 @@ from services.ai_service import analyze_complaint
 from services.issue_clustering import get_or_create_issue_for_complaint
 from services import community_service as community
 from services import impact_score_service as impact
+from services.resolution_workflow import bump_review_revision, citizen_resolution_view
 from utils.time_helper import to_iso8601, utc_now
 from utils.upload_validation import UploadError, save_upload, validate_image_upload
+from utils.validators import ValidationError, parse_optional_coordinates
 
 
 complaint_bp = Blueprint("complaint", __name__)
@@ -123,16 +125,15 @@ def create_complaint():
     latitude = data.get("latitude")
     longitude = data.get("longitude")
 
-    if not title or not description or latitude is None or longitude is None:
+    if not title or not description or latitude in (None, "") or longitude in (None, ""):
         return jsonify({
             "message": "Title, description and a confirmed map location are required"
         }), 400
 
     try:
-        latitude = float(latitude)
-        longitude = float(longitude)
-    except (TypeError, ValueError):
-        return jsonify({"message": "Location coordinates are invalid"}), 400
+        latitude, longitude = parse_optional_coordinates(latitude, longitude)
+    except ValidationError as error:
+        return jsonify({"message": str(error)}), 400
 
     location = address or f"{latitude:.6f}, {longitude:.6f}"
 
@@ -213,9 +214,13 @@ def create_complaint():
             description=description,
             location_label=location
         )
+        existing_issue = issue.id is not None
         db.session.add(issue)
         db.session.flush()
         complaint.issue_id = issue.id
+
+        if existing_issue:
+            bump_review_revision(issue, "A new complaint was linked to this issue")
 
         db.session.add(complaint)
         db.session.commit()
@@ -268,6 +273,21 @@ def get_my_complaints():
     }), 200
 
 
+def _find_viewable_complaint(complaint_id, user_id):
+    """The complaint if this user may view it: Officers/Admins any, everyone
+    else only their own. None otherwise (callers answer 404 either way, so
+    other people's complaint ids cannot be probed)."""
+    user = User.query.get(int(user_id))
+
+    if user and user.role in ["Officer", "Admin"]:
+        return Complaint.query.get(complaint_id)
+
+    return Complaint.query.filter_by(
+        id=complaint_id,
+        user_id=int(user_id)
+    ).first()
+
+
 # ==========================================
 # GET SINGLE COMPLAINT
 # ==========================================
@@ -275,21 +295,33 @@ def get_my_complaints():
 @complaint_bp.route("/<int:complaint_id>", methods=["GET"])
 @jwt_required()
 def get_complaint(complaint_id):
-    user_id = get_jwt_identity()
-    user = User.query.get(int(user_id))
-
-    if user and user.role in ["Officer", "Admin"]:
-        complaint = Complaint.query.get(complaint_id)
-    else:
-        complaint = Complaint.query.filter_by(
-            id=complaint_id,
-            user_id=int(user_id)
-        ).first()
+    complaint = _find_viewable_complaint(complaint_id, get_jwt_identity())
 
     if not complaint:
         return jsonify({"message": "Complaint not found"}), 404
 
     return jsonify({"complaint": serialize_complaint(complaint)}), 200
+
+
+# ==========================================
+# BEFORE / AFTER RESOLUTION EVIDENCE
+# ==========================================
+
+@complaint_bp.route("/<int:complaint_id>/resolution-evidence", methods=["GET"])
+@jwt_required()
+def get_resolution_evidence(complaint_id):
+    """Citizen-safe resolution progress for one complaint. Same access rule
+    as GET /<id>: the reporting citizen, or an Officer/Admin. The payload is
+    an allow-list (see citizen_resolution_view): completion evidence is
+    returned only once the Chief Officer has approved it."""
+    complaint = _find_viewable_complaint(complaint_id, get_jwt_identity())
+
+    if not complaint:
+        return jsonify({"message": "Complaint not found"}), 404
+
+    return jsonify({
+        "evidence": citizen_resolution_view(complaint, current_app.config["UPLOAD_FOLDER"])
+    }), 200
 
 
 # ==========================================
@@ -313,20 +345,24 @@ def update_complaint(complaint_id):
     if not data:
         return jsonify({"message": "Request body is required"}), 400
 
-    if "title" in data:
-        complaint.title = data["title"]
-    if "description" in data:
-        complaint.description = data["description"]
-    if "category" in data:
-        complaint.category = data["category"]
-    if "location" in data:
-        complaint.location = data["location"]
-    if "latitude" in data and "longitude" in data:
-        try:
-            complaint.latitude = float(data["latitude"])
-            complaint.longitude = float(data["longitude"])
-        except (TypeError, ValueError):
-            return jsonify({"message": "Location coordinates are invalid"}), 400
+    material_change = False
+    for field in ("title", "description", "category", "location"):
+        if field in data and getattr(complaint, field) != data[field]:
+            setattr(complaint, field, data[field])
+            material_change = True
+    try:
+        latitude, longitude = parse_optional_coordinates(
+            data.get("latitude"), data.get("longitude")
+        )
+    except ValidationError as error:
+        return jsonify({"message": str(error)}), 400
+    if latitude is not None and (complaint.latitude != latitude or complaint.longitude != longitude):
+        complaint.latitude = latitude
+        complaint.longitude = longitude
+        material_change = True
+
+    if material_change and complaint.issue:
+        bump_review_revision(complaint.issue, "Complaint details changed after review information was recorded")
 
     db.session.commit()
 
@@ -361,7 +397,7 @@ def update_complaint_status(complaint_id):
         return jsonify({"message": "Status is required"}), 400
 
     new_status = data.get("status")
-    allowed_statuses = ["Pending", "In Progress", "Resolved"]
+    allowed_statuses = ["Pending", "In Progress"]
 
     if new_status not in allowed_statuses:
         return jsonify({
@@ -435,6 +471,8 @@ def reject_out_of_scope(complaint_id):
     # same adjustment made for a Confirmed spam decision in routes/officers.py.
     if complaint.issue and complaint.issue.report_count > 0:
         complaint.issue.report_count -= 1
+    if complaint.issue:
+        bump_review_revision(complaint.issue, "Complaint was marked out of scope")
 
     db.session.add(Notification(
         user_id=complaint.user_id,
@@ -485,6 +523,8 @@ def reopen_rejected_complaint(complaint_id):
     complaint.rejection_status = "NotRejected"
     complaint.rejection_reopened_by = user.id
     complaint.rejection_reopened_at = utc_now()
+    if complaint.issue:
+        bump_review_revision(complaint.issue, "Out-of-scope decision was reopened")
 
     db.session.commit()
 

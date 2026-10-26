@@ -14,8 +14,9 @@ env/
 instance/
 *.db
 
-# Uploaded files
+# Uploaded files (private_uploads/ holds staff-only evidence)
 uploads/
+private_uploads/
 
 # Local test images
 pothole.jpg

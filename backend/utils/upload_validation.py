@@ -1,6 +1,7 @@
 """Validation and safe storage for complaint photo uploads."""
 
 import os
+import hashlib
 
 from werkzeug.utils import secure_filename
 
@@ -84,3 +85,17 @@ def save_upload(file_storage, folder, stored_name):
         raise
 
     return final_path
+
+
+def upload_sha256(file_storage):
+    """Hash an already-validated upload while preserving its stream position."""
+    stream = file_storage.stream
+    stream.seek(0)
+    digest = hashlib.sha256()
+    while True:
+        chunk = stream.read(64 * 1024)
+        if not chunk:
+            break
+        digest.update(chunk)
+    stream.seek(0)
+    return digest.hexdigest()

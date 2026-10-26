@@ -28,7 +28,11 @@ os.environ["DATABASE_URL"] = f"sqlite:///{_test_db_path}"
 _test_upload_dir = tempfile.mkdtemp(prefix="civicpulse_test_uploads_")
 os.environ["UPLOAD_FOLDER"] = _test_upload_dir
 
-from app import app as flask_app
+# Staff-only evidence lives in its own directory, never inside the public one.
+_test_private_upload_dir = tempfile.mkdtemp(prefix="civicpulse_test_private_uploads_")
+os.environ["PRIVATE_UPLOAD_FOLDER"] = _test_private_upload_dir
+
+from app import app as flask_app, migrate_performance_schema, migrate_resolution_workflow_schema, migrate_ward_registry_schema
 from database.db import db
 from models.user import User
 from services.auth_service import hash_password
@@ -43,6 +47,9 @@ def app():
 
     with flask_app.app_context():
         db.create_all()
+        migrate_resolution_workflow_schema()
+        migrate_ward_registry_schema()
+        migrate_performance_schema()
         yield flask_app
         db.session.remove()
         db.drop_all()
@@ -55,6 +62,7 @@ def pytest_sessionfinish(session, exitstatus):
         pass
     # Only ever removes the temp directory created above.
     shutil.rmtree(_test_upload_dir, ignore_errors=True)
+    shutil.rmtree(_test_private_upload_dir, ignore_errors=True)
 
 
 @pytest.fixture
@@ -95,6 +103,19 @@ def admin_user(app):
         email="admin@example.com",
         password_hash=hash_password("admin123"),
         role="Admin"
+    )
+    db.session.add(user)
+    db.session.commit()
+    return user
+
+
+@pytest.fixture
+def chief_officer_user(app):
+    user = User(
+        name="Test Chief Officer",
+        email="chief@example.com",
+        password_hash=hash_password("chief123"),
+        role="Chief Officer"
     )
     db.session.add(user)
     db.session.commit()

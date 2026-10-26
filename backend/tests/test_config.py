@@ -4,6 +4,7 @@ from config import (
     DEV_JWT_SECRET_KEY,
     DEV_SECRET_KEY,
     ConfigurationError,
+    resolve_private_upload_folder,
     resolve_secrets,
     resolve_server_options,
 )
@@ -163,3 +164,19 @@ def test_app_refuses_to_start_in_production_without_secrets():
 
     assert result.returncode != 0
     assert "SECRET_KEY is missing or blank" in result.stderr
+
+
+# ---- staff-only evidence folder -------------------------------------------
+
+def test_private_upload_folder_must_not_be_served_publicly(tmp_path):
+    public = tmp_path / "uploads"
+    public.mkdir()
+    elsewhere = tmp_path / "private"
+    assert resolve_private_upload_folder({"PRIVATE_UPLOAD_FOLDER": str(elsewhere)}, str(public)) == str(elsewhere)
+    assert resolve_private_upload_folder({}, str(public)).endswith("private_uploads")  # default
+    for inside in (str(public), str(public / "evidence"), str(public / ".." / "uploads")):
+        with pytest.raises(ConfigurationError):
+            resolve_private_upload_folder({"PRIVATE_UPLOAD_FOLDER": inside}, str(public))
+    # A sibling whose name merely starts with the same text is fine.
+    sibling = tmp_path / "uploads_private"
+    assert resolve_private_upload_folder({"PRIVATE_UPLOAD_FOLDER": str(sibling)}, str(public)) == str(sibling)

@@ -96,6 +96,22 @@ def resolve_server_options(environ):
     return host, port, debug
 
 
+def resolve_private_upload_folder(environ, upload_folder):
+    """Where staff-only evidence (e.g. correction photos) is stored.
+
+    It is never served by the public /uploads route, so it must not sit inside
+    the public upload folder (or be the same folder): that would make the
+    files reachable without logging in. Raises ConfigurationError if it does."""
+    folder = (environ.get("PRIVATE_UPLOAD_FOLDER") or "").strip() or os.path.join(basedir, "private_uploads")
+    private_real = os.path.realpath(folder)
+    public_real = os.path.realpath(upload_folder)
+    if private_real == public_real or private_real.startswith(public_real + os.sep):
+        raise ConfigurationError(
+            "PRIVATE_UPLOAD_FOLDER must be outside UPLOAD_FOLDER, because UPLOAD_FOLDER is served without authentication"
+        )
+    return folder
+
+
 def _positive_int_env(name, default):
     """Integer env var; blank, non-numeric or non-positive values fall back."""
     try:
@@ -122,6 +138,8 @@ class Config:
     # Where complaint photos are stored and served from. Defaults to
     # backend/uploads; override with UPLOAD_FOLDER (tests use a temp dir).
     UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER") or os.path.join(basedir, "uploads")
+    # Staff-only evidence. Not served by /uploads; read only through authenticated endpoints.
+    PRIVATE_UPLOAD_FOLDER = resolve_private_upload_folder(os.environ, UPLOAD_FOLDER)
     MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
     MAX_CONTENT_LENGTH = MAX_UPLOAD_BYTES + 1024 * 1024
     SQLALCHEMY_TRACK_MODIFICATIONS = False

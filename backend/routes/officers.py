@@ -10,6 +10,7 @@ from models.user import User
 from routes.complaints import serialize_complaint
 from services import community_service as community
 from services import impact_score_service as impact
+from services.resolution_workflow import bump_review_revision, change_issue_status
 from utils.time_helper import to_iso8601, utc_now
 
 officer_bp = Blueprint("officer", __name__)
@@ -255,6 +256,9 @@ def review_spam_report(complaint_id):
     else:
         impact.on_complaint_validated(complaint)
 
+    if complaint.issue:
+        bump_review_revision(complaint.issue, "Spam moderation changed complaint eligibility")
+
     db.session.commit()
 
     return jsonify({
@@ -311,6 +315,9 @@ def reopen_spam_review(complaint_id):
     complaint.spam_reopened_by = user.id
     complaint.spam_reopened_at = utc_now()
 
+    if complaint.issue:
+        bump_review_revision(complaint.issue, "Spam moderation was reopened")
+
     db.session.commit()
 
     return jsonify({
@@ -328,7 +335,7 @@ def reopen_spam_review(complaint_id):
 # ISSUE CLUSTERS - OFFICER/ADMIN ONLY
 # ==========================================
 
-ALLOWED_ISSUE_STATUSES = ["Pending", "In Progress", "Resolved"]
+ALLOWED_ISSUE_STATUSES = ["Pending", "In Progress"]
 
 
 def serialize_issue(issue):
@@ -340,6 +347,7 @@ def serialize_issue(issue):
         "longitude": issue.longitude,
         "status": issue.status,
         "report_count": issue.report_count,
+        "review_revision": issue.review_revision,
         "ai_summary": issue.ai_summary,
         "created_at": to_iso8601(issue.created_at),
         "updated_at": to_iso8601(issue.updated_at),
@@ -445,28 +453,14 @@ def update_issue_status(issue_id):
             "allowed_statuses": ALLOWED_ISSUE_STATUSES
         }), 400
 
-    # Deliberately does NOT cascade-write every member complaint's own
-    # status - the issue is the operational work item, but each citizen's
-    # individual complaint history/status is preserved as-is. Citizens see
-    # this issue's status via their complaint's `civic_issue` field
-    # instead.
-    old_status = issue.status
-    issue.status = new_status
-
-    # Level 2: record official status history (the community timeline shows
-    # only real events), reward the citizens whose reports led to a
-    # resolution, and notify affected reporters/supporters - once per
-    # actual change, never for a no-op re-save of the same status.
-    if old_status != new_status:
-        db.session.add(CivicIssueStatusChange(
-            civic_issue_id=issue.id,
-            old_status=old_status,
-            new_status=new_status,
-            changed_by=user.id,
-        ))
-        if new_status == "Resolved":
-            impact.on_issue_resolved(issue)
-        community.notify_issue_status_changed(issue, new_status)
+    # Final resolution is intentionally absent from this route. It requires
+    # Chief Officer approval through the issue-wide review workflow.
+    # Pulling an issue back out of Pending Review withdraws the submission:
+    # the Chief Officer must not approve a review the field team has since
+    # reopened. The review is kept, only marked Stale.
+    if issue.status == "Pending Review":
+        bump_review_revision(issue, "Issue was returned to field work by an officer")
+    change_issue_status(issue, new_status, user.id)
 
     db.session.commit()
 
