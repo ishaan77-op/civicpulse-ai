@@ -48,6 +48,18 @@ class CivicIssue(db.Model):
         default=0
     )
 
+    # Incremented whenever information that a final-resolution reviewer must
+    # consider changes.  A ResolutionReview stores the value it was submitted
+    # against; Stage 2 uses that snapshot to reject stale approvals.
+    #
+    # Existing issues start at 1.  The column is added additively in app.py
+    # for databases created before the resolution workflow existed.
+    review_revision = db.Column(
+        db.Integer,
+        nullable=False,
+        default=1
+    )
+
     ai_summary = db.Column(
         db.Text,
         nullable=True

@@ -1,6 +1,7 @@
 import { useContext, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AuthContext } from '../context/authcontextvalue.jsx'
+import { homeRouteForRole } from '../utils/roleHome.js'
 import Brand from './brand.jsx'
 
 const navigation = [
@@ -36,7 +37,7 @@ export default function Navbar() {
                   <Link className="text-link" to="/officer" onClick={closeMenu}>Officer</Link>
                 )}
                 {user?.role === 'Chief Officer' && (
-                  <Link className="text-link" to="/chief-officer" onClick={closeMenu}>Chief Officer</Link>
+                  <Link className="text-link" to="/chief-officer" onClick={closeMenu}>Resolution Review</Link>
                 )}
                 {user?.role === 'Admin' && (
                   <Link className="text-link" to="/admin" onClick={closeMenu}>Admin</Link>

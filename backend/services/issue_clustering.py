@@ -88,19 +88,52 @@ def find_matching_issue(category, latitude, longitude, ai_summary, description):
     return best_match
 
 
+MAX_CLAIM_ATTEMPTS = 3
+
+
+def claim_open_issue(issue):
+    """Atomically count a new report against ``issue`` if it is still open.
+
+    ``find_matching_issue`` reads without a lock, so the issue can be resolved
+    (or its count changed) before the complaint is linked.  This single UPDATE
+    both takes the write lock - SQLite has no row locks, and a SELECT does not
+    start a write transaction - and only matches while the issue is not
+    Resolved, so the status check and the link cannot be separated by a
+    concurrent approval.  Returns False, changing nothing, if the issue was
+    resolved in the meantime.  The increment is done in SQL so concurrent
+    reports cannot overwrite each other's count.
+    """
+    claimed = CivicIssue.query.filter(
+        CivicIssue.id == issue.id, CivicIssue.status != "Resolved"
+    ).update(
+        {CivicIssue.report_count: CivicIssue.report_count + 1},
+        synchronize_session=False,
+    )
+    if claimed != 1:
+        db.session.expire(issue)
+        return False
+    db.session.refresh(issue)
+    return True
+
+
 def get_or_create_issue_for_complaint(category, latitude, longitude, ai_summary, description, location_label):
     """Finds a matching CivicIssue for a new complaint (creating one if no
     good match exists) and returns it, with report_count already updated.
     The caller is responsible for setting complaint.issue_id from the
-    returned issue (flushing first if it's newly created, to get an id)."""
+    returned issue (flushing first if it's newly created, to get an id).
 
-    matched_issue = find_matching_issue(
-        category, latitude, longitude, ai_summary, description
-    )
+    If the matched issue is resolved between the lookup and the claim, the
+    lookup is repeated; it never attaches a complaint to a Resolved issue.
+    After MAX_CLAIM_ATTEMPTS lost races a new issue is started instead."""
 
-    if matched_issue:
-        matched_issue.report_count += 1
-        return matched_issue
+    for _ in range(MAX_CLAIM_ATTEMPTS):
+        matched_issue = find_matching_issue(
+            category, latitude, longitude, ai_summary, description
+        )
+        if matched_issue is None:
+            break
+        if claim_open_issue(matched_issue):
+            return matched_issue
 
     new_issue = CivicIssue(
         category=category,

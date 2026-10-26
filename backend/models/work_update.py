@@ -1,79 +1,51 @@
+"""Auditable officer field-work records for a shared civic issue."""
+
 from database.db import db
 from utils.time_helper import utc_now
 
 
-ALLOWED_WORK_UPDATE_STATUSES = ["Pending", "In Progress"]
+ALLOWED_WORK_UPDATE_STATUSES = ("Pending", "In Progress")
 
 
-class ComplaintWorkUpdate(db.Model):
-    """A field-work evidence update submitted by an Officer against an
-    existing complaint.
+class IssueWorkUpdate(db.Model):
+    """Progress recorded against the underlying issue.
 
-    Multiple updates can exist for the same complaint (the full work log
-    is kept in the order they were created). A server-generated timestamp
-    is always used so the official completion/progress time is never
-    controlled by the client.
-
-    Structured so a future "final resolution evidence" update can reuse
-    this exact table without schema changes - the `status` column already
-    carries that intent.
+    ``complaint_id`` is optional because one visit can address the entire
+    issue.  When a visit concerns one report or location specifically, the
+    association preserves that context without duplicating the work log for
+    every linked complaint.
     """
 
-    __tablename__ = "complaint_work_updates"
+    __tablename__ = "issue_work_updates"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "officer_id", "idempotency_key", name="uq_issue_work_update_retry"
+        ),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
-
+    issue_id = db.Column(
+        db.Integer, db.ForeignKey("civic_issues.id"), nullable=False, index=True
+    )
     complaint_id = db.Column(
-        db.Integer,
-        db.ForeignKey("complaints.id"),
-        nullable=False,
-        index=True,
+        db.Integer, db.ForeignKey("complaints.id"), nullable=True, index=True
     )
-
-    # The officer who submitted this update - resolved from the JWT; never
-    # trust a client-supplied officer identity.
     officer_id = db.Column(
-        db.Integer,
-        db.ForeignKey("users.id"),
-        nullable=False,
+        db.Integer, db.ForeignKey("users.id"), nullable=False, index=True
     )
-
-    # Mirrors the allowed statuses on Complaint itself so this log stays
-    # consistent with the parent complaint's lifecycle.
-    status = db.Column(
-        db.String(50),
-        nullable=False,
-        default="In Progress",
-    )
-
-    note = db.Column(
-        db.Text,
-        nullable=False,
-    )
-
-    # Optional evidence photo (same upload scheme as the complaint image).
-    image_filename = db.Column(
-        db.String(255),
-        nullable=True,
-    )
-
-    # Optional GPS location of the officer at the time of the update.
+    status = db.Column(db.String(50), nullable=False, default="In Progress")
+    note = db.Column(db.Text, nullable=False)
+    image_filename = db.Column(db.String(255), nullable=True)
     latitude = db.Column(db.Float, nullable=True)
     longitude = db.Column(db.Float, nullable=True)
 
-    # Authoritative server-generated timestamp - never set by the client.
-    created_at = db.Column(
-        db.DateTime,
-        nullable=False,
-        default=utc_now,
-    )
+    # A client-generated retry key is optional for backwards-compatible API
+    # rollout.  When supplied, the database guarantees one update per officer
+    # and key even if a request is retried after a network failure.
+    idempotency_key = db.Column(db.String(128), nullable=True)
+    request_fingerprint = db.Column(db.String(64), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utc_now, index=True)
 
-    # Back-references for convenience in queries.
-    complaint = db.relationship("Complaint", backref="work_updates")
+    issue = db.relationship("CivicIssue")
+    complaint = db.relationship("Complaint")
     officer = db.relationship("User", foreign_keys=[officer_id])
-
-    def __repr__(self):
-        return (
-            f"<ComplaintWorkUpdate complaint={self.complaint_id} "
-            f"officer={self.officer_id} status={self.status}>"
-        )

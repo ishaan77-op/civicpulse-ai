@@ -6,12 +6,27 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from werkzeug.exceptions import HTTPException
 
-from config import Config
+from config import Config, ConfigurationError, LOOPBACK_HOSTS, resolve_server_options
 from database.db import db
 from models.user import User
 from models.complaint import Complaint
 from models.civic_issue import CivicIssue
 from models.notification import Notification
+from models.ward import Ward, WardOfficerAssignment  # noqa: F401
+from models.performance import (  # noqa: F401
+    FOLLOW_UP_EVENT_TYPES,
+    FOLLOW_UP_STATES,
+    FollowUpEvent,
+    ResolutionFollowUp,
+    ResolutionRating,
+)
+from models.work_update import ALLOWED_WORK_UPDATE_STATUSES, IssueWorkUpdate  # noqa: F401
+from models.resolution_review import (  # noqa: F401
+    COMPLAINT_DISPOSITIONS,
+    REVIEW_STATES,
+    ResolutionReview,
+    ResolutionReviewComplaintDisposition,
+)
 # Level 2 community tables - imported so db.create_all() below creates them.
 # These are brand-new tables only; no existing table is altered.
 from models.community import (  # noqa: F401
@@ -21,11 +36,6 @@ from models.community import (  # noqa: F401
     IssueSupport,
     IssueVerification,
 )
-# Officer field-work evidence log (Feature 1). Brand-new table; no existing
-# table is altered.
-from models.work_update import ComplaintWorkUpdate  # noqa: F401
-# Chief Officer resolution review log (Feature 2). Brand-new table only.
-from models.resolution_review import ResolutionReview  # noqa: F401
 from routes.auth import auth_bp
 from routes.complaints import complaint_bp
 from routes.officers import officer_bp
@@ -33,6 +43,8 @@ from routes.admin import admin_bp
 from routes.notifications import notification_bp
 from routes.community import community_bp
 from routes.resolution_review import resolution_bp
+from routes.wards import ward_bp
+from routes.supervision import supervision_bp
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -290,95 +302,347 @@ def migrate_out_of_scope_rejection_columns():
         conn.close()
 
 
-def migrate_work_update_table():
-    """Additive migration: ensure the complaint_work_updates table exists
-    for databases that pre-date this feature. db.create_all() already
-    handles new databases; this guard is only needed so the dev database
-    created before this feature was added is never broken on restart.
-    No-op if the table already exists. Never drops data."""
+LEGACY_RESOLUTION_REVIEWS_TABLE = "resolution_reviews_legacy_complaint_level"
+
+
+def migrate_legacy_resolution_reviews_table():
+    """Set aside the prototype's complaint-level ``resolution_reviews`` table.
+
+    An earlier prototype stored reviews per complaint.  ``db.create_all()``
+    never alters an existing table, so that layout would shadow the current
+    issue-level table.  It is renamed (rows, indexes and data intact) so
+    ``create_all`` can create the new table.  Must run before ``create_all``.
+    Safe to rerun: it does nothing once the table has the issue-level layout,
+    and it refuses to overwrite an existing legacy-named table.
+    """
 
     db_uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
-
     if not db_uri.startswith("sqlite:///"):
         return
 
     db_path = db_uri[len("sqlite:///"):]
-
     if not os.path.exists(db_path):
         return
 
     conn = sqlite3.connect(db_path)
     try:
         cur = conn.cursor()
+        cur.execute("PRAGMA table_info(resolution_reviews)")
+        columns = {row[1] for row in cur.fetchall()}
+        if not columns or "issue_id" in columns:
+            return
+        if "complaint_id" not in columns:
+            raise RuntimeError(
+                "resolution_reviews has an unrecognised schema; refusing to modify it"
+            )
+        exists = cur.execute(
+            "SELECT 1 FROM sqlite_master WHERE name = ?",
+            (LEGACY_RESOLUTION_REVIEWS_TABLE,),
+        ).fetchone()
+        if exists:
+            raise RuntimeError(
+                f"Cannot set aside legacy resolution_reviews: "
+                f"{LEGACY_RESOLUTION_REVIEWS_TABLE} already exists"
+            )
         cur.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='complaint_work_updates'"
+            f"ALTER TABLE resolution_reviews RENAME TO {LEGACY_RESOLUTION_REVIEWS_TABLE}"
         )
-        if not cur.fetchone():
-            cur.execute("""
-                CREATE TABLE complaint_work_updates (
-                    id INTEGER PRIMARY KEY,
-                    complaint_id INTEGER NOT NULL REFERENCES complaints(id),
-                    officer_id INTEGER NOT NULL REFERENCES users(id),
-                    status VARCHAR(50) NOT NULL DEFAULT 'In Progress',
-                    note TEXT NOT NULL,
-                    image_filename VARCHAR(255),
-                    latitude FLOAT,
-                    longitude FLOAT,
-                    created_at DATETIME NOT NULL
-                )
-            """)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _create_value_guards(cur, table, column, allowed, label):
+    """Reject values outside ``allowed`` at the database level.
+
+    SQLite cannot add a CHECK constraint to an existing table, so insert and
+    update triggers give both new and upgraded databases the same protection
+    without rebuilding any table.
+    """
+    values = ", ".join("'" + value.replace("'", "''") + "'" for value in allowed)
+    message = f"Invalid {label}"
+    for suffix, event in (("insert", "INSERT"), ("update", f"UPDATE OF {column}")):
+        cur.execute(
+            f"CREATE TRIGGER IF NOT EXISTS {table}_valid_{column}_{suffix} "
+            f"BEFORE {event} ON {table} "
+            f"WHEN NEW.{column} NOT IN ({values}) "
+            f"BEGIN SELECT RAISE(ABORT, '{message}'); END"
+        )
+
+
+def migrate_resolution_workflow_schema():
+    """Apply additive, idempotent resolution-workflow schema upgrades.
+
+    New tables come from ``db.create_all()``.  Existing databases only gain
+    columns, indexes, and audit-protection triggers; no table is rebuilt,
+    dropped, or rewritten beyond backfilling a valid revision default.
+    """
+
+    db_uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+    if not db_uri.startswith("sqlite:///"):
+        return
+
+    db_path = db_uri[len("sqlite:///"):]
+    if not os.path.exists(db_path):
+        return
+
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute("PRAGMA table_info(civic_issues)")
+        columns = {row[1] for row in cur.fetchall()}
+        if "review_revision" not in columns:
             cur.execute(
-                "CREATE INDEX ix_complaint_work_updates_complaint_id "
-                "ON complaint_work_updates(complaint_id)"
+                "ALTER TABLE civic_issues "
+                "ADD COLUMN review_revision INTEGER NOT NULL DEFAULT 1"
+            )
+        cur.execute(
+            "UPDATE civic_issues SET review_revision = 1 "
+            "WHERE review_revision IS NULL OR review_revision < 1"
+        )
+
+        tables = {
+            row[0] for row in cur.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
+        if "issue_work_updates" in tables:
+            cur.execute("PRAGMA table_info(issue_work_updates)")
+            work_update_columns = {row[1] for row in cur.fetchall()}
+            if "request_fingerprint" not in work_update_columns:
+                cur.execute(
+                    "ALTER TABLE issue_work_updates "
+                    "ADD COLUMN request_fingerprint VARCHAR(64)"
+                )
+            _create_value_guards(
+                cur, "issue_work_updates", "status",
+                ALLOWED_WORK_UPDATE_STATUSES, "work update status",
+            )
+
+        if "resolution_reviews" in tables:
+            cur.execute("PRAGMA table_info(resolution_reviews)")
+            review_columns = {row[1] for row in cur.fetchall()}
+            if "supersedes_review_id" not in review_columns:
+                cur.execute(
+                    "ALTER TABLE resolution_reviews "
+                    "ADD COLUMN supersedes_review_id INTEGER REFERENCES resolution_reviews(id)"
+                )
+            if "stale_reason" not in review_columns:
+                cur.execute("ALTER TABLE resolution_reviews ADD COLUMN stale_reason TEXT")
+            if "stale_at" not in review_columns:
+                cur.execute("ALTER TABLE resolution_reviews ADD COLUMN stale_at DATETIME")
+            cur.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                "uq_resolution_reviews_pending_issue "
+                "ON resolution_reviews(issue_id) WHERE state = 'Pending'"
+            )
+            _create_value_guards(
+                cur, "resolution_reviews", "state", REVIEW_STATES, "resolution review state"
+            )
+
+        _create_value_guards(
+            cur, "civic_issues", "status",
+            ("Pending", "In Progress", "Pending Review", "Resolved"), "civic issue status",
+        )
+
+        if "resolution_review_complaint_dispositions" in tables:
+            _create_value_guards(
+                cur, "resolution_review_complaint_dispositions", "disposition",
+                COMPLAINT_DISPOSITIONS, "complaint disposition",
+            )
+            cur.execute(
+                "CREATE TRIGGER IF NOT EXISTS "
+                "resolution_dispositions_immutable_update "
+                "BEFORE UPDATE ON resolution_review_complaint_dispositions "
+                "BEGIN SELECT RAISE(ABORT, 'Resolution review dispositions are immutable'); END"
+            )
+            cur.execute(
+                "CREATE TRIGGER IF NOT EXISTS "
+                "resolution_dispositions_immutable_delete "
+                "BEFORE DELETE ON resolution_review_complaint_dispositions "
+                "BEGIN SELECT RAISE(ABORT, 'Resolution review dispositions are immutable'); END"
             )
         conn.commit()
     finally:
         conn.close()
 
 
-def migrate_resolution_review_table():
-    """Additive migration: ensure the resolution_reviews table exists
-    for databases that pre-date this feature. db.create_all() already
-    handles new databases; this guard is only needed so the dev database
-    created before Feature 2 was added is never broken on restart.
-    No-op if the table already exists. Never drops data."""
+def migrate_ward_registry_schema():
+    """Apply additive, idempotent protections for the ward registry tables.
+
+    The tables themselves come from ``db.create_all()``; nothing is rebuilt,
+    dropped, or seeded.  This adds what SQLAlchemy cannot express portably:
+    a case-insensitive unique ward code, "at most one active assignment per
+    ward and Officer" for databases whose table predates the index, an
+    Officer-role check on new assignments, and triggers that make assignment
+    history append-only (a row may only be *ended*, once) and keep wards from
+    being deleted.
+    """
 
     db_uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
-
     if not db_uri.startswith("sqlite:///"):
         return
 
     db_path = db_uri[len("sqlite:///"):]
-
     if not os.path.exists(db_path):
         return
 
     conn = sqlite3.connect(db_path)
     try:
         cur = conn.cursor()
-        cur.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='resolution_reviews'"
-        )
-        if not cur.fetchone():
-            cur.execute("""
-                CREATE TABLE resolution_reviews (
-                    id INTEGER PRIMARY KEY,
-                    complaint_id INTEGER NOT NULL REFERENCES complaints(id),
-                    submitted_by INTEGER NOT NULL REFERENCES users(id),
-                    completion_note TEXT NOT NULL,
-                    image_filename VARCHAR(255) NOT NULL,
-                    latitude FLOAT,
-                    longitude FLOAT,
-                    submitted_at DATETIME NOT NULL,
-                    decision VARCHAR(20),
-                    reviewed_by INTEGER REFERENCES users(id),
-                    rejection_note TEXT,
-                    reviewed_at DATETIME
-                )
-            """)
+        tables = {
+            row[0] for row in cur.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
+        if "wards" in tables:
             cur.execute(
-                "CREATE INDEX ix_resolution_reviews_complaint_id "
-                "ON resolution_reviews(complaint_id)"
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_wards_code_nocase "
+                "ON wards(code COLLATE NOCASE) WHERE code IS NOT NULL"
+            )
+            cur.execute(
+                "CREATE TRIGGER IF NOT EXISTS wards_no_delete BEFORE DELETE ON wards "
+                "BEGIN SELECT RAISE(ABORT, 'Wards cannot be deleted; deactivate them instead'); END"
+            )
+        if "ward_officer_assignments" in tables:
+            cur.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_ward_assignment_active_pair "
+                "ON ward_officer_assignments(ward_id, officer_id) WHERE ended_at IS NULL"
+            )
+            cur.execute(
+                "CREATE TRIGGER IF NOT EXISTS ward_assignments_officer_only "
+                "BEFORE INSERT ON ward_officer_assignments "
+                "WHEN (SELECT role FROM users WHERE id = NEW.officer_id) IS NOT 'Officer' "
+                "BEGIN SELECT RAISE(ABORT, 'Only Officers can be assigned to a ward'); END"
+            )
+            cur.execute(
+                "CREATE TRIGGER IF NOT EXISTS ward_assignments_no_delete "
+                "BEFORE DELETE ON ward_officer_assignments "
+                "BEGIN SELECT RAISE(ABORT, 'Ward assignment history is immutable'); END"
+            )
+            # The only permitted change: an active row gaining its end details,
+            # exactly once. Every historical column is frozen.
+            cur.execute(
+                "CREATE TRIGGER IF NOT EXISTS ward_assignments_immutable_update "
+                "BEFORE UPDATE ON ward_officer_assignments "
+                "WHEN OLD.ended_at IS NOT NULL "
+                "OR NEW.id IS NOT OLD.id "
+                "OR NEW.ward_id IS NOT OLD.ward_id "
+                "OR NEW.officer_id IS NOT OLD.officer_id "
+                "OR NEW.assigned_by IS NOT OLD.assigned_by "
+                "OR NEW.assigned_at IS NOT OLD.assigned_at "
+                "OR NEW.reason IS NOT OLD.reason "
+                "BEGIN SELECT RAISE(ABORT, 'Ward assignment history is immutable'); END"
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def migrate_performance_schema():
+    """Additive, idempotent protections for ratings and follow-ups.
+
+    Tables come from ``db.create_all()``.  This adds the database-level rules
+    the API also enforces, so a direct SQL write cannot bypass them: rating
+    scale and explanation rules, "only a Chief Officer rates only approved
+    work and only its submitter", the single-chain revision indexes, valid
+    follow-up states, and append-only (no update, no delete) history for
+    ratings and follow-up events.
+    """
+
+    db_uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+    if not db_uri.startswith("sqlite:///"):
+        return
+
+    db_path = db_uri[len("sqlite:///"):]
+    if not os.path.exists(db_path):
+        return
+
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        tables = {
+            row[0] for row in cur.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
+        if "resolution_ratings" in tables:
+            cur.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_rating_one_original "
+                "ON resolution_ratings(resolution_review_id) WHERE supersedes_rating_id IS NULL"
+            )
+            cur.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_rating_one_revision "
+                "ON resolution_ratings(supersedes_rating_id) WHERE supersedes_rating_id IS NOT NULL"
+            )
+            rules = [
+                ("stars_range", "NEW.stars NOT BETWEEN 1 AND 5", "Rating must be between 1 and 5 stars"),
+                ("low_needs_explanation",
+                 "NEW.stars <= 2 AND (NEW.explanation IS NULL OR trim(NEW.explanation) = '')",
+                 "An explanation is required for a rating of 1 or 2 stars"),
+                ("follow_up_flag",
+                 "NEW.needs_follow_up IS NOT (NEW.stars <= 2)",
+                 "needs_follow_up must match the rating"),
+                ("chief_only",
+                 "(SELECT role FROM users WHERE id = NEW.rated_by) IS NOT 'Chief Officer'",
+                 "Only a Chief Officer can rate work"),
+                ("approved_only",
+                 "(SELECT state FROM resolution_reviews WHERE id = NEW.resolution_review_id) IS NOT 'Approved'",
+                 "Only approved work can be rated"),
+                ("submitter_only",
+                 "NEW.rated_officer_id IS NOT (SELECT submitted_by FROM resolution_reviews WHERE id = NEW.resolution_review_id)",
+                 "The rated officer must be the review submitter"),
+            ]
+            for name, condition, message in rules:
+                cur.execute(
+                    f"CREATE TRIGGER IF NOT EXISTS resolution_ratings_{name} "
+                    f"BEFORE INSERT ON resolution_ratings WHEN {condition} "
+                    f"BEGIN SELECT RAISE(ABORT, '{message}'); END"
+                )
+            cur.execute(
+                "CREATE TRIGGER IF NOT EXISTS resolution_ratings_immutable_update "
+                "BEFORE UPDATE ON resolution_ratings "
+                "BEGIN SELECT RAISE(ABORT, 'Rating history is immutable; submit a revision'); END"
+            )
+            cur.execute(
+                "CREATE TRIGGER IF NOT EXISTS resolution_ratings_immutable_delete "
+                "BEFORE DELETE ON resolution_ratings "
+                "BEGIN SELECT RAISE(ABORT, 'Rating history is immutable'); END"
+            )
+        if "resolution_follow_ups" in tables:
+            _create_value_guards(
+                cur, "resolution_follow_ups", "status", FOLLOW_UP_STATES, "follow-up status"
+            )
+            cur.execute(
+                "CREATE TRIGGER IF NOT EXISTS resolution_follow_ups_no_delete "
+                "BEFORE DELETE ON resolution_follow_ups "
+                "BEGIN SELECT RAISE(ABORT, 'Follow-up cases cannot be deleted'); END"
+            )
+            # The review and rating a case belongs to never change.
+            cur.execute(
+                "CREATE TRIGGER IF NOT EXISTS resolution_follow_ups_frozen_links "
+                "BEFORE UPDATE ON resolution_follow_ups "
+                "WHEN NEW.resolution_review_id IS NOT OLD.resolution_review_id "
+                "OR NEW.rating_id IS NOT OLD.rating_id OR NEW.issue_id IS NOT OLD.issue_id "
+                "OR NEW.created_by IS NOT OLD.created_by OR NEW.created_at IS NOT OLD.created_at "
+                "BEGIN SELECT RAISE(ABORT, 'A follow-up case cannot be re-linked'); END"
+            )
+        if "resolution_follow_up_events" in tables:
+            _create_value_guards(
+                cur, "resolution_follow_up_events", "event_type", FOLLOW_UP_EVENT_TYPES, "follow-up event"
+            )
+            _create_value_guards(
+                cur, "resolution_follow_up_events", "to_status", FOLLOW_UP_STATES, "follow-up status"
+            )
+            cur.execute(
+                "CREATE TRIGGER IF NOT EXISTS resolution_follow_up_events_immutable_update "
+                "BEFORE UPDATE ON resolution_follow_up_events "
+                "BEGIN SELECT RAISE(ABORT, 'Follow-up history is immutable'); END"
+            )
+            cur.execute(
+                "CREATE TRIGGER IF NOT EXISTS resolution_follow_up_events_immutable_delete "
+                "BEFORE DELETE ON resolution_follow_up_events "
+                "BEGIN SELECT RAISE(ABORT, 'Follow-up history is immutable'); END"
             )
         conn.commit()
     finally:
@@ -388,14 +652,16 @@ def migrate_resolution_review_table():
 with app.app_context():
     instance_path = os.path.join(os.path.dirname(__file__), "instance")
     os.makedirs(instance_path, exist_ok=True)
+    migrate_legacy_resolution_reviews_table()
     db.create_all()
     migrate_complaint_location_columns()
     migrate_spam_moderation_columns()
     migrate_spam_reopen_columns()
     migrate_issue_clustering_columns()
     migrate_out_of_scope_rejection_columns()
-    migrate_work_update_table()
-    migrate_resolution_review_table()
+    migrate_resolution_workflow_schema()
+    migrate_ward_registry_schema()
+    migrate_performance_schema()
 
 
 @jwt.token_in_blocklist_loader
@@ -412,9 +678,18 @@ app.register_blueprint(auth_bp, url_prefix="/api/auth")
 app.register_blueprint(complaint_bp, url_prefix="/api/complaints")
 app.register_blueprint(officer_bp, url_prefix="/api/officers")
 app.register_blueprint(admin_bp, url_prefix="/api/admin")
+app.register_blueprint(ward_bp, url_prefix="/api/admin")
 app.register_blueprint(notification_bp, url_prefix="/api/notifications")
 app.register_blueprint(community_bp, url_prefix="/api/community")
 app.register_blueprint(resolution_bp, url_prefix="/api")
+app.register_blueprint(supervision_bp, url_prefix="/api")
+
+
+@app.errorhandler(413)
+def handle_request_too_large(error):
+    return jsonify({
+        "message": f"Upload is too large. The maximum photo size is {app.config['MAX_UPLOAD_BYTES'] // (1024 * 1024)} MB."
+    }), 413
 
 
 @app.errorhandler(HTTPException)
@@ -430,8 +705,7 @@ def handle_unexpected_exception(error):
 
 @app.route("/uploads/<path:filename>")
 def serve_upload(filename):
-    upload_folder = os.path.join(os.path.dirname(__file__), "uploads")
-    return send_from_directory(upload_folder, filename)
+    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
 
 
 @app.route("/api/health")
@@ -447,6 +721,16 @@ def home():
 
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 5001))
-    debug = os.getenv("FLASK_DEBUG", "false").lower() in ("1", "true", "yes")
-    app.run(host="0.0.0.0", port=port, debug=debug)
+    # Defaults: 127.0.0.1, debug off. See resolve_server_options in config.py.
+    try:
+        host, port, debug = resolve_server_options(os.environ)
+    except ConfigurationError as error:
+        raise SystemExit(f"Configuration error: {error}")
+
+    if host not in LOOPBACK_HOSTS:
+        print(
+            f"WARNING: listening on {host}:{port} - the API is reachable from "
+            "other devices on your network."
+        )
+
+    app.run(host=host, port=port, debug=debug)

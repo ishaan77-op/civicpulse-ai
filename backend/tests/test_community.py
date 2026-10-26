@@ -6,6 +6,7 @@ from database.db import db
 from models.community import ImpactScoreEvent, IssueComment
 from models.notification import Notification
 from services import impact_score_service as impact
+from tests.helpers import JPEG_BYTES
 
 
 def get_token(client, email, password):
@@ -59,7 +60,7 @@ def submit_complaint(client, token, ai_result=POTHOLE_AI_RESULT, latitude=20.011
                 "latitude": str(latitude),
                 "longitude": str(longitude),
                 "address": "College Road, Nashik, Maharashtra",
-                "image": (io.BytesIO(b"fake-image-bytes"), "photo.jpg"),
+                "image": (io.BytesIO(JPEG_BYTES), "photo.jpg"),
             },
             content_type="multipart/form-data",
             headers=auth(token),
@@ -81,6 +82,33 @@ def create_public_issue(client):
     token = get_token(client, "citizen@example.com", "password123")
     complaint = submit_complaint(client, token)
     return token, complaint["civic_issue"]["id"]
+
+
+def resolve_issue_through_review(client, issue_id, officer_token, chief_token):
+    detail = client.get(
+        f"/api/officers/issues/{issue_id}/complaints", headers=auth(officer_token)
+    )
+    complaint_ids = [row["id"] for row in detail.get_json()["complaints"]]
+    submission = client.post(
+        f"/api/issues/{issue_id}/resolution-reviews",
+        data={
+            "completion_note": "Work completed and every linked report checked.",
+            "dispositions": json.dumps([
+                {"complaint_id": complaint_id, "disposition": "Addressed", "note": "Covered by repair."}
+                for complaint_id in complaint_ids
+            ]),
+            "image": (io.BytesIO(JPEG_BYTES), "final.jpg"),
+        },
+        content_type="multipart/form-data",
+        headers=auth(officer_token),
+    )
+    assert submission.status_code == 201, submission.get_json()
+    review_id = submission.get_json()["review"]["id"]
+    decision = client.put(
+        f"/api/chief-officer/resolution-reviews/{review_id}/decision",
+        json={"decision": "Approved"}, headers=auth(chief_token),
+    )
+    assert decision.status_code == 200, decision.get_json()
 
 
 # ==========================================
@@ -138,10 +166,11 @@ def test_client_supplied_counts_and_user_ids_are_ignored(client, citizen_user):
     assert score(client, other) == impact.WEIGHTS["ISSUE_SUPPORT"]
 
 
-def test_cannot_support_resolved_issue(client, citizen_user, officer_user):
+def test_cannot_support_resolved_issue(client, citizen_user, officer_user, chief_officer_user):
     _, issue_id = create_public_issue(client)
     officer = get_token(client, "officer@example.com", "officer123")
-    client.put(f"/api/officers/issues/{issue_id}/status", json={"status": "Resolved"}, headers=auth(officer))
+    chief = get_token(client, "chief@example.com", "chief123")
+    resolve_issue_through_review(client, issue_id, officer, chief)
     other = register_citizen(client, "second@example.com")
 
     res = client.post(f"/api/community/issues/{issue_id}/support", headers=auth(other))
@@ -407,35 +436,34 @@ def test_confirmed_spam_penalty_and_reopen_reversal(client, citizen_user, office
     assert "VALID_COMPLAINT_REVOKED" in types
 
 
-def test_resolution_reward_once_and_notifications(client, citizen_user, officer_user):
+def test_resolution_reward_once_and_notifications(client, citizen_user, officer_user, chief_officer_user):
     token, issue_id = create_public_issue(client)
     supporter = register_citizen(client, "second@example.com")
     client.post(f"/api/community/issues/{issue_id}/support", headers=auth(supporter))
     officer = get_token(client, "officer@example.com", "officer123")
+    chief = get_token(client, "chief@example.com", "chief123")
     before = score(client, token)
 
-    url = f"/api/officers/issues/{issue_id}/status"
-    client.put(url, json={"status": "Resolved"}, headers=auth(officer))
-    client.put(url, json={"status": "Resolved"}, headers=auth(officer))  # no-op re-save
-    client.put(url, json={"status": "In Progress"}, headers=auth(officer))
-    client.put(url, json={"status": "Resolved"}, headers=auth(officer))
+    resolve_issue_through_review(client, issue_id, officer, chief)
 
     assert score(client, token) == before + impact.WEIGHTS["ISSUE_RESOLVED"]
     # Supporting doesn't make you the reporter of a resolved issue.
     assert score(client, supporter) == impact.WEIGHTS["ISSUE_SUPPORT"]
 
     reporter_notes = Notification.query.filter_by(user_id=citizen_user.id).all()
-    assert len(reporter_notes) == 3  # Resolved, In Progress, Resolved - not the no-op
+    assert len(reporter_notes) == 1
     supporter_notes = client.get("/api/notifications/", headers=auth(supporter)).get_json()["notifications"]
-    assert len(supporter_notes) == 3
+    assert len(supporter_notes) == 1
 
     timeline = client.get(f"/api/community/issues/{issue_id}", headers=auth(token)).get_json()["issue"]["timeline"]
     official = [e for e in timeline if e["kind"] == "official"]
+    # The review workflow moves the issue to Pending Review before the chief
+    # officer's approval resolves it, and both transitions are recorded.
     assert [e["label"] for e in official] == [
-        "Official status changed to Resolved",
-        "Official status changed to In Progress",
+        "Official status changed to Pending Review",
         "Official status changed to Resolved",
     ]
+    assert [e["at"] for e in official] == sorted(e["at"] for e in official)
 
 
 def test_daily_cap_limits_support_points(client, citizen_user, monkeypatch):
@@ -576,10 +604,11 @@ def test_community_analytics_admin_only(client, citizen_user, officer_user, admi
     assert summary["average_impact_score"] == impact.WEIGHTS["VALID_COMPLAINT"]
 
 
-def test_officer_issue_list_includes_community_signal_and_dispute(client, citizen_user, officer_user):
+def test_officer_issue_list_includes_community_signal_and_dispute(client, citizen_user, officer_user, chief_officer_user):
     _, issue_id = create_public_issue(client)
     officer = get_token(client, "officer@example.com", "officer123")
-    client.put(f"/api/officers/issues/{issue_id}/status", json={"status": "Resolved"}, headers=auth(officer))
+    chief = get_token(client, "chief@example.com", "chief123")
+    resolve_issue_through_review(client, issue_id, officer, chief)
     for i in range(3):
         voter = register_citizen(client, f"voter{i}@example.com")
         client.post(f"/api/community/issues/{issue_id}/verify", json={"verification_type": "STILL_EXISTS"},

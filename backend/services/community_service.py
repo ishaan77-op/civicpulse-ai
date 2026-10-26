@@ -452,8 +452,10 @@ def issue_timeline(issue):
                 "detail": None,
             })
 
+    # id breaks ties so transitions recorded in the same instant keep the
+    # order in which they happened.
     for change in CivicIssueStatusChange.query.filter_by(civic_issue_id=issue.id).order_by(
-        CivicIssueStatusChange.created_at.asc()
+        CivicIssueStatusChange.created_at.asc(), CivicIssueStatusChange.id.asc()
     ).all():
         events.append({
             "at": to_iso8601(change.created_at),

@@ -1,5 +1,6 @@
 import io
 from unittest.mock import patch
+from tests.helpers import JPEG_BYTES
 
 
 def get_token(client, email, password):
@@ -8,7 +9,7 @@ def get_token(client, email, password):
 
 
 def fake_image():
-    return (io.BytesIO(b"fake-image-bytes"), "photo.jpg")
+    return (io.BytesIO(JPEG_BYTES), "photo.jpg")
 
 
 def create_complaint(client, token, ai_result, title="Pothole on Main St"):

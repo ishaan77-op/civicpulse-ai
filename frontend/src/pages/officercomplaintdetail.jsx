@@ -3,7 +3,8 @@
  *
  * A dedicated complaint-detail view for Officers/Admins. Shows all the
  * standard complaint metadata (same as the citizen view) PLUS the
- * WorkUpdatePanel so the officer can record field-work evidence.
+ * IssueWorkPanel so the officer can record field work and submit completed work
+ * for review (tracked per civic issue).
  *
  * Reached via /officer/complaints/:id — a protected route added in App.jsx.
  * Does NOT replace or modify the existing citizen ComplaintDetails page.
@@ -12,8 +13,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import AppShell from '../components/appshell.jsx'
-import WorkUpdatePanel from '../components/WorkUpdatePanel.jsx'
-import ResolutionReviewPanel from '../components/ResolutionReviewPanel.jsx'
+import IssueWorkPanel from '../components/IssueWorkPanel.jsx'
 import { apiErrorMessage } from '../services/api.js'
 import { getComplaint } from '../services/complaintservice.js'
 import { formatDateTime } from '../utils/formatDateTime.js'
@@ -40,7 +40,8 @@ export default function OfficerComplaintDetail() {
   }, [id])
 
   useEffect(() => {
-    loadComplaint()
+    const timer = window.setTimeout(loadComplaint, 0)
+    return () => window.clearTimeout(timer)
   }, [loadComplaint])
 
   if (loading) {
@@ -165,18 +166,13 @@ export default function OfficerComplaintDetail() {
           </section>
         )}
 
-        {/* ── field-work evidence panel ── */}
-        <WorkUpdatePanel
-          complaintId={complaint.id}
-          onUpdateSubmitted={loadComplaint}
-        />
-
-        {/* ── final resolution review panel ── */}
-        <ResolutionReviewPanel
-          complaintId={complaint.id}
-          complaintStatus={complaint.status}
-          onReviewSubmitted={loadComplaint}
-        />
+        {/* Field work and resolution review are tracked per civic issue (all linked reports
+            together), so this complaint's issue is the unit that is worked and reviewed. */}
+        {complaint.civic_issue?.id ? (
+          <IssueWorkPanel issueId={complaint.civic_issue.id} onChanged={loadComplaint} />
+        ) : (
+          <p className="resolution-muted">This report is not linked to a civic issue yet, so there is no field work to record.</p>
+        )}
       </div>
     </AppShell>
   )

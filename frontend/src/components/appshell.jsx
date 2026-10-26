@@ -17,7 +17,7 @@ function linksForRole(role) {
 
   if (role === 'Chief Officer') {
     return [
-      { to: '/chief-officer', label: 'Review Queue' },
+      { to: '/chief-officer', label: 'Resolution Review' },
       { to: '/community', label: 'Community' },
     ]
   }
@@ -73,7 +73,7 @@ export default function AppShell({ title, eyebrow, children }) {
               {user && <p>Welcome back, {user.name} ({user.role || 'Citizen'}).</p>}
             </div>
           </div>
-          {user?.role === 'Citizen' && <NotificationBanner />}
+          {['Citizen', 'Officer', 'Chief Officer'].includes(user?.role) && <NotificationBanner />}
           {children}
         </div>
       </main>

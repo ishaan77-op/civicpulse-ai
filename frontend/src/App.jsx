@@ -13,11 +13,11 @@ import ComplaintDetails from './pages/complaintdetails.jsx'
 import Profile from './pages/profile.jsx'
 import OfficerDashboard from './pages/officerdashboard.jsx'
 import OfficerComplaintDetail from './pages/officercomplaintdetail.jsx'
-import ChiefOfficerDashboard from './pages/chiefOfficerDashboard.jsx'
 import AdminDashboard from './pages/admindashboard.jsx'
 import NotFound from './pages/notfound.jsx'
 import Community from './pages/community.jsx'
 import CommunityIssue from './pages/communityissue.jsx'
+import ChiefOfficerDashboard from './pages/chiefofficerdashboard.jsx'
 
 function App() {
   return (

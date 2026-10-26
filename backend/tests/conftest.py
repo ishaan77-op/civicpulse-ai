@@ -1,4 +1,5 @@
 import os
+import shutil
 import sys
 import tempfile
 import pytest
@@ -6,6 +7,10 @@ import pytest
 backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
+
+# Tests run as an explicit development environment (config.py refuses to
+# fall back to insecure default secrets in any other environment).
+os.environ["APP_ENV"] = "development"
 
 # IMPORTANT: this must be set before `app` is imported below. `config.py`
 # reads DATABASE_URL at import time, and `app.py` runs `db.create_all()`
@@ -18,7 +23,16 @@ _test_db_fd, _test_db_path = tempfile.mkstemp(suffix=".db")
 os.close(_test_db_fd)
 os.environ["DATABASE_URL"] = f"sqlite:///{_test_db_path}"
 
-from app import app as flask_app
+# Same reasoning for uploaded files: route the upload folder to a temp
+# directory so tests never write into the real backend/uploads folder.
+_test_upload_dir = tempfile.mkdtemp(prefix="civicpulse_test_uploads_")
+os.environ["UPLOAD_FOLDER"] = _test_upload_dir
+
+# Staff-only evidence lives in its own directory, never inside the public one.
+_test_private_upload_dir = tempfile.mkdtemp(prefix="civicpulse_test_private_uploads_")
+os.environ["PRIVATE_UPLOAD_FOLDER"] = _test_private_upload_dir
+
+from app import app as flask_app, migrate_performance_schema, migrate_resolution_workflow_schema, migrate_ward_registry_schema
 from database.db import db
 from models.user import User
 from services.auth_service import hash_password
@@ -33,6 +47,9 @@ def app():
 
     with flask_app.app_context():
         db.create_all()
+        migrate_resolution_workflow_schema()
+        migrate_ward_registry_schema()
+        migrate_performance_schema()
         yield flask_app
         db.session.remove()
         db.drop_all()
@@ -43,6 +60,9 @@ def pytest_sessionfinish(session, exitstatus):
         os.remove(_test_db_path)
     except OSError:
         pass
+    # Only ever removes the temp directory created above.
+    shutil.rmtree(_test_upload_dir, ignore_errors=True)
+    shutil.rmtree(_test_private_upload_dir, ignore_errors=True)
 
 
 @pytest.fixture

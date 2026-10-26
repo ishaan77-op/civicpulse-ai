@@ -1,320 +1,503 @@
-"""
-Resolution Review routes — Feature 2: Chief Officer Review & Final Resolution.
+"""Officer field-work and Chief Officer issue-resolution workflow routes."""
 
-Officer endpoints:
-  POST /api/officers/complaints/<id>/resolution-review
-      Submit a final-resolution request (completion note + evidence photo).
-      Sets complaint.status → "Pending Review".
-
-  GET  /api/officers/complaints/<id>/resolution-review
-      Retrieve the current resolution review for a complaint (Officer or
-      Chief Officer). Includes the latest review and its decision.
-
-Chief Officer endpoints (role == "Chief Officer" only):
-  GET  /api/chief-officer/resolution-queue
-      List all complaints currently awaiting final review.
-
-  PUT  /api/chief-officer/resolution-reviews/<review_id>/decide
-      Approve or reject a pending resolution request.
-      Approve → complaint.status = "Resolved"
-      Reject  → complaint.status = "In Progress", stores rejection_note.
-
-Security guarantees (all enforced server-side):
-  - Only Officers can submit resolution requests.
-  - Only Chief Officers can approve/reject.
-  - A submitting Officer cannot approve their own request.
-  - A request that has already been decided cannot be approved twice.
-  - Timestamps and reviewer identities always come from the server.
-"""
+import hashlib
+import json
 import os
 import uuid
 
-from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
-from werkzeug.utils import secure_filename
+from flask import Blueprint, current_app, jsonify, request
+from flask_jwt_extended import get_jwt_identity, jwt_required
+from sqlalchemy.exc import IntegrityError
 
 from database.db import db
+from models.civic_issue import CivicIssue
 from models.complaint import Complaint
-from models.resolution_review import ResolutionReview, REVIEW_DECISIONS
+from models.resolution_review import (
+    COMPLAINT_DISPOSITIONS,
+    ResolutionReview,
+    ResolutionReviewComplaintDisposition,
+)
 from models.user import User
+from models.work_update import ALLOWED_WORK_UPDATE_STATUSES, IssueWorkUpdate
 from routes.complaints import serialize_complaint
+from routes.officers import serialize_issue
+from services.resolution_workflow import (
+    NO_ELIGIBLE_COMPLAINTS_MESSAGE,
+    StaleReviewError,
+    WorkflowError,
+    approve_review,
+    bump_review_revision,
+    change_issue_status,
+    eligible_complaints,
+    ensure_issue_complaint,
+    excluded_complaints,
+    lock_issue_at_revision,
+    moderation_pending_complaints,
+    stale_reviews_awaiting_resubmission,
+    validate_review_coverage,
+)
 from utils.time_helper import to_iso8601, utc_now
+from utils.upload_validation import (
+    UploadError,
+    save_upload,
+    upload_sha256,
+    validate_image_upload,
+)
+from utils.validators import ValidationError, parse_optional_coordinates
 
 
 resolution_bp = Blueprint("resolution", __name__)
+WORKER_ROLES = ("Officer", "Admin")
+STAFF_VIEWER_ROLES = ("Officer", "Admin", "Chief Officer")
 
 
-# ---------------------------------------------------------------------------
-# Helper: serialize a ResolutionReview for API responses
-# ---------------------------------------------------------------------------
+def _current_user():
+    identity = get_jwt_identity()
+    return User.query.get(int(identity)) if identity is not None else None
 
-def serialize_review(rv):
+
+def _require_roles(roles, message):
+    user = _current_user()
+    if not user or user.role not in roles:
+        return None, (jsonify({"message": message}), 403)
+    return user, None
+
+
+def _safe_remove(path):
+    if path and os.path.exists(path):
+        try:
+            os.remove(path)
+        except OSError:
+            current_app.logger.warning("Could not remove failed workflow upload")
+
+
+def _parse_optional_complaint_id(raw_value):
+    if raw_value in (None, ""):
+        return None
+    try:
+        return int(raw_value)
+    except (TypeError, ValueError):
+        raise WorkflowError("Complaint ID must be a whole number") from None
+
+
+def _work_fingerprint(issue_id, complaint_id, status, note, latitude, longitude, image_digest):
+    payload = {
+        "issue_id": issue_id,
+        "complaint_id": complaint_id,
+        "status": status,
+        "note": note,
+        "latitude": latitude,
+        "longitude": longitude,
+        "image_sha256": image_digest,
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def serialize_work_update(update):
     return {
-        "id": rv.id,
-        "complaint_id": rv.complaint_id,
-        "submitted_by": rv.submitted_by,
-        "officer_name": rv.officer.name if rv.officer else None,
-        "completion_note": rv.completion_note,
-        "image_filename": rv.image_filename,
-        "image_url": f"/uploads/{rv.image_filename}" if rv.image_filename else None,
-        "latitude": rv.latitude,
-        "longitude": rv.longitude,
-        "submitted_at": to_iso8601(rv.submitted_at),
-        "decision": rv.decision,
-        "reviewed_by": rv.reviewed_by,
-        "reviewer_name": rv.reviewer.name if rv.reviewer else None,
-        "rejection_note": rv.rejection_note,
-        "reviewed_at": to_iso8601(rv.reviewed_at),
+        "id": update.id,
+        "issue_id": update.issue_id,
+        "complaint_id": update.complaint_id,
+        "officer_id": update.officer_id,
+        "status": update.status,
+        "note": update.note,
+        "image_url": f"/uploads/{update.image_filename}" if update.image_filename else None,
+        "latitude": update.latitude,
+        "longitude": update.longitude,
+        "created_at": to_iso8601(update.created_at),
     }
 
 
-# ---------------------------------------------------------------------------
-# POST  /officers/complaints/<id>/resolution-review
-# Officer submits final-resolution request
-# ---------------------------------------------------------------------------
+def serialize_review(review, include_dispositions=True):
+    data = {
+        "id": review.id,
+        "issue_id": review.issue_id,
+        "submitted_by": review.submitted_by,
+        "completion_note": review.completion_note,
+        "image_url": f"/uploads/{review.image_filename}",
+        "latitude": review.latitude,
+        "longitude": review.longitude,
+        "issue_revision": review.issue_revision,
+        "state": review.state,
+        "submitted_at": to_iso8601(review.submitted_at),
+        "reviewed_by": review.reviewed_by,
+        "reviewed_at": to_iso8601(review.reviewed_at),
+        "rejection_reason": review.rejection_reason,
+        "stale_reason": review.stale_reason,
+        "stale_at": to_iso8601(review.stale_at),
+        "supersedes_review_id": review.supersedes_review_id,
+    }
+    if include_dispositions:
+        data["dispositions"] = [
+            {
+                "complaint_id": row.complaint_id,
+                "disposition": row.disposition,
+                "note": row.note,
+                "created_at": to_iso8601(row.created_at),
+            }
+            for row in review.complaint_dispositions
+        ]
+    return data
 
-@resolution_bp.route("/officers/complaints/<int:complaint_id>/resolution-review", methods=["POST"])
+
+def _issue_context(issue):
+    all_complaints = Complaint.query.filter_by(issue_id=issue.id).order_by(
+        Complaint.created_at.asc()
+    ).all()
+    excluded = {complaint.id: reason for complaint, reason in excluded_complaints(issue.id)}
+    pending_moderation = {complaint.id for complaint in moderation_pending_complaints(issue.id)}
+    return {
+        "issue": serialize_issue(issue),
+        "complaints": [serialize_complaint(complaint) for complaint in all_complaints],
+        "review_checklist": [
+            {
+                "complaint_id": complaint.id,
+                "eligible": complaint.id not in excluded and complaint.id not in pending_moderation,
+                "excluded_reason": excluded.get(complaint.id),
+                "blocked_reason": "Awaiting spam moderation" if complaint.id in pending_moderation else None,
+            }
+            for complaint in all_complaints
+        ],
+    }
+
+
+@resolution_bp.route("/issues/<int:issue_id>/work-updates", methods=["POST"])
 @jwt_required()
-def submit_resolution_review(complaint_id):
-    """Submit a final-resolution evidence request for Chief Officer review.
+def create_work_update(issue_id):
+    officer, denied = _require_roles(WORKER_ROLES, "Officer or Admin access required")
+    if denied:
+        return denied
+    issue = CivicIssue.query.get(issue_id)
+    if not issue:
+        return jsonify({"message": "Issue not found"}), 404
 
-    Accepts multipart/form-data so a final evidence photo can be included.
-    The complaint status advances to "Pending Review".
-    A new submission is blocked if one is already pending (officer must wait
-    for the Chief Officer to decide before re-submitting).
-    """
-    user_id = get_jwt_identity()
-    user = User.query.get(int(user_id))
+    key = (request.headers.get("Idempotency-Key") or "").strip()
+    if not key or len(key) > 128:
+        return jsonify({"message": "A valid Idempotency-Key header is required"}), 400
 
-    if not user or user.role not in ["Officer", "Admin"]:
-        return jsonify({"message": "Officer or Admin access required"}), 403
+    note = (request.form.get("note") or "").strip()
+    status = (request.form.get("status") or "In Progress").strip()
+    if not note:
+        return jsonify({"message": "A progress note is required"}), 400
+    if status not in ALLOWED_WORK_UPDATE_STATUSES:
+        return jsonify({"message": "Invalid work-update status", "allowed_statuses": list(ALLOWED_WORK_UPDATE_STATUSES)}), 400
 
-    complaint = Complaint.query.get(complaint_id)
-    if not complaint:
-        return jsonify({"message": "Complaint not found"}), 404
+    try:
+        complaint_id = _parse_optional_complaint_id(request.form.get("complaint_id"))
+        if complaint_id is not None:
+            ensure_issue_complaint(issue.id, complaint_id)
+        latitude, longitude = parse_optional_coordinates(
+            request.form.get("latitude"), request.form.get("longitude")
+        )
+    except (WorkflowError, ValidationError) as error:
+        return jsonify({"message": str(error)}), 400
 
-    if complaint.spam_review_status == "Confirmed":
-        return jsonify({"message": "Cannot submit resolution for a complaint confirmed as spam"}), 400
+    image = request.files.get("image")
+    image_digest = None
+    original_filename = None
+    if image and image.filename:
+        try:
+            original_filename = validate_image_upload(image, current_app.config["MAX_UPLOAD_BYTES"])
+            image_digest = upload_sha256(image)
+        except UploadError as error:
+            return jsonify({"message": error.message}), error.status_code
 
-    # Reject if a review is already pending — the Chief Officer must decide
-    # before the officer can re-submit.
-    existing_pending = ResolutionReview.query.filter_by(
-        complaint_id=complaint_id, decision=None
+    fingerprint = _work_fingerprint(
+        issue.id, complaint_id, status, note, latitude, longitude, image_digest
+    )
+    existing = IssueWorkUpdate.query.filter_by(
+        officer_id=officer.id, idempotency_key=key
     ).first()
-    if existing_pending:
-        return jsonify({
-            "message": "A resolution review is already pending for this complaint. "
-                       "Wait for the Chief Officer's decision before re-submitting."
-        }), 400
+    if existing:
+        if existing.request_fingerprint == fingerprint:
+            return jsonify({"message": "Work update already recorded", "work_update": serialize_work_update(existing)}), 200
+        return jsonify({"message": "Idempotency-Key was already used with a different work update"}), 409
 
-    data = request.form
-    completion_note = (data.get("completion_note") or "").strip()
-    if not completion_note:
+    saved_path = None
+    try:
+        filename = None
+        if original_filename:
+            filename = f"{uuid.uuid4().hex}_{original_filename}"
+            saved_path = save_upload(image, current_app.config["UPLOAD_FOLDER"], filename)
+
+        update = IssueWorkUpdate(
+            issue_id=issue.id,
+            complaint_id=complaint_id,
+            officer_id=officer.id,
+            status=status,
+            note=note,
+            image_filename=filename,
+            latitude=latitude,
+            longitude=longitude,
+            idempotency_key=key,
+            request_fingerprint=fingerprint,
+        )
+        db.session.add(update)
+        if status == "In Progress":
+            change_issue_status(issue, "In Progress", officer.id)
+        bump_review_revision(issue, "Field-work evidence or progress changed")
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        _safe_remove(saved_path)
+        existing = IssueWorkUpdate.query.filter_by(
+            officer_id=officer.id, idempotency_key=key
+        ).first()
+        if existing and existing.request_fingerprint == fingerprint:
+            return jsonify({"message": "Work update already recorded", "work_update": serialize_work_update(existing)}), 200
+        return jsonify({"message": "Idempotency-Key was already used with a different work update"}), 409
+    except Exception:
+        db.session.rollback()
+        _safe_remove(saved_path)
+        current_app.logger.exception("Failed to create issue work update")
+        return jsonify({"message": "Could not record the work update"}), 500
+
+    return jsonify({"message": "Work update recorded", "work_update": serialize_work_update(update)}), 201
+
+
+@resolution_bp.route("/issues/<int:issue_id>/work-updates", methods=["GET"])
+@jwt_required()
+def list_work_updates(issue_id):
+    _viewer, denied = _require_roles(STAFF_VIEWER_ROLES, "Staff access required")
+    if denied:
+        return denied
+    if not CivicIssue.query.get(issue_id):
+        return jsonify({"message": "Issue not found"}), 404
+    updates = IssueWorkUpdate.query.filter_by(issue_id=issue_id).order_by(
+        IssueWorkUpdate.created_at.asc(), IssueWorkUpdate.id.asc()
+    ).all()
+    return jsonify({"work_updates": [serialize_work_update(update) for update in updates]}), 200
+
+
+@resolution_bp.route("/issues/<int:issue_id>/resolution-reviews", methods=["POST"])
+@jwt_required()
+def submit_resolution_review(issue_id):
+    officer, denied = _require_roles(WORKER_ROLES, "Officer or Admin access required")
+    if denied:
+        return denied
+    issue = CivicIssue.query.get(issue_id)
+    if not issue:
+        return jsonify({"message": "Issue not found"}), 404
+
+    note = (request.form.get("completion_note") or "").strip()
+    if not note:
         return jsonify({"message": "A completion note is required"}), 400
-
-    # Final evidence photo is mandatory for resolution requests.
     image = request.files.get("image")
     if not image or not image.filename:
-        return jsonify({"message": "A final evidence photo is required"}), 400
+        return jsonify({"message": "Final evidence photo is required"}), 400
+    try:
+        original_filename = validate_image_upload(image, current_app.config["MAX_UPLOAD_BYTES"])
+        latitude, longitude = parse_optional_coordinates(
+            request.form.get("latitude"), request.form.get("longitude")
+        )
+        raw_dispositions = json.loads(request.form.get("dispositions") or "")
+    except UploadError as error:
+        return jsonify({"message": error.message}), error.status_code
+    except (ValidationError, json.JSONDecodeError):
+        return jsonify({"message": "Valid dispositions and GPS coordinates are required"}), 400
 
-    original_filename = secure_filename(image.filename)
-    unique_filename = f"{uuid.uuid4().hex}_{original_filename}"
-    upload_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
-    os.makedirs(upload_folder, exist_ok=True)
-    image.save(os.path.join(upload_folder, unique_filename))
+    if not isinstance(raw_dispositions, list):
+        return jsonify({"message": "Dispositions must be a list"}), 400
 
-    latitude = None
-    longitude = None
-    lat_raw = data.get("latitude")
-    lng_raw = data.get("longitude")
-    if lat_raw is not None and lng_raw is not None:
-        try:
-            latitude = float(lat_raw)
-            longitude = float(lng_raw)
-        except (TypeError, ValueError):
-            return jsonify({"message": "GPS coordinates are invalid"}), 400
+    try:
+        pending_moderation = moderation_pending_complaints(issue.id)
+        if pending_moderation:
+            raise WorkflowError("Final review is blocked while linked complaints await spam moderation")
+        eligible_ids = {complaint.id for complaint in eligible_complaints(issue.id)}
+        if not eligible_ids:
+            raise WorkflowError(NO_ELIGIBLE_COMPLAINTS_MESSAGE)
+        provided_ids = set()
+        normalized_dispositions = []
+        for item in raw_dispositions:
+            if not isinstance(item, dict):
+                raise WorkflowError("Each complaint disposition must be an object")
+            complaint_id = _parse_optional_complaint_id(item.get("complaint_id"))
+            if complaint_id is None or complaint_id in provided_ids:
+                raise WorkflowError("Each eligible complaint requires one disposition")
+            ensure_issue_complaint(issue.id, complaint_id)
+            disposition = (item.get("disposition") or "").strip()
+            disposition_note = (item.get("note") or "").strip()
+            if disposition not in COMPLAINT_DISPOSITIONS or not disposition_note:
+                raise WorkflowError("Each disposition requires an allowed value and a note")
+            if disposition == "Additional Work Required":
+                raise WorkflowError("Complete outstanding work before requesting final review")
+            provided_ids.add(complaint_id)
+            normalized_dispositions.append((complaint_id, disposition, disposition_note))
+        if provided_ids != eligible_ids:
+            raise WorkflowError("The submission must account for every eligible linked complaint")
 
-    rv = ResolutionReview(
-        complaint_id=complaint_id,
-        submitted_by=user.id,
-        completion_note=completion_note,
-        image_filename=unique_filename,
-        latitude=latitude,
-        longitude=longitude,
-        submitted_at=utc_now(),
-    )
+        raw_supersedes = request.form.get("supersedes_review_id")
+        supersedes_id = _parse_optional_complaint_id(raw_supersedes)
+        pending = ResolutionReview.query.filter_by(issue_id=issue.id, state="Pending").first()
+        superseded_review = None
+        if pending:
+            if supersedes_id != pending.id or pending.submitted_by != officer.id:
+                raise WorkflowError("A resolution review is already awaiting Chief Officer decision")
+            superseded_review = pending
+        elif supersedes_id is not None:
+            superseded_review = ResolutionReview.query.filter_by(
+                id=supersedes_id, issue_id=issue.id, submitted_by=officer.id
+            ).first()
+            if not superseded_review:
+                raise WorkflowError("The review to supersede does not belong to this officer and issue")
+    except WorkflowError as error:
+        return jsonify({"message": str(error)}), 400
 
-    # Advance complaint to "Pending Review" so officers and Chief Officers
-    # know it is awaiting final sign-off. The complaint must NOT become
-    # "Resolved" here — that only happens on Chief Officer approval.
-    complaint.status = "Pending Review"
+    saved_path = None
+    try:
+        filename = f"{uuid.uuid4().hex}_{original_filename}"
+        saved_path = save_upload(image, current_app.config["UPLOAD_FOLDER"], filename)
+        # Eligibility above was read against this revision; if the issue has
+        # changed since, the dispositions may no longer cover it.
+        if not lock_issue_at_revision(issue.id, issue.review_revision):
+            raise WorkflowError("The issue changed while the review was being prepared; please review it again")
+        if superseded_review and superseded_review.state == "Pending":
+            superseded_review.state = "Superseded"
+            db.session.flush()
+        review = ResolutionReview(
+            issue_id=issue.id,
+            submitted_by=officer.id,
+            completion_note=note,
+            image_filename=filename,
+            latitude=latitude,
+            longitude=longitude,
+            issue_revision=issue.review_revision,
+            supersedes_review_id=superseded_review.id if superseded_review else None,
+        )
+        db.session.add(review)
+        db.session.flush()
+        for complaint_id, disposition, disposition_note in normalized_dispositions:
+            db.session.add(ResolutionReviewComplaintDisposition(
+                resolution_review_id=review.id,
+                complaint_id=complaint_id,
+                disposition=disposition,
+                note=disposition_note,
+            ))
+        change_issue_status(issue, "Pending Review", officer.id)
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        _safe_remove(saved_path)
+        return jsonify({"message": "A resolution review is already awaiting Chief Officer decision"}), 409
+    except WorkflowError as error:
+        db.session.rollback()
+        _safe_remove(saved_path)
+        return jsonify({"message": str(error)}), 409
+    except Exception:
+        db.session.rollback()
+        _safe_remove(saved_path)
+        current_app.logger.exception("Failed to submit resolution review")
+        return jsonify({"message": "Could not submit the resolution review"}), 500
 
-    db.session.add(rv)
-    db.session.commit()
-
-    return jsonify({
-        "message": "Resolution review submitted. Awaiting Chief Officer approval.",
-        "review": serialize_review(rv),
-        "complaint": serialize_complaint(complaint),
-    }), 201
+    return jsonify({"message": "Resolution review submitted", "review": serialize_review(review)}), 201
 
 
-# ---------------------------------------------------------------------------
-# GET  /officers/complaints/<id>/resolution-review
-# Officer or Chief Officer retrieves the current review for a complaint
-# ---------------------------------------------------------------------------
-
-@resolution_bp.route("/officers/complaints/<int:complaint_id>/resolution-review", methods=["GET"])
+@resolution_bp.route("/issues/<int:issue_id>/resolution-reviews", methods=["GET"])
 @jwt_required()
-def get_resolution_review(complaint_id):
-    """Return the most recent resolution review for a complaint.
+def list_resolution_reviews(issue_id):
+    _viewer, denied = _require_roles(STAFF_VIEWER_ROLES, "Staff access required")
+    if denied:
+        return denied
+    issue = CivicIssue.query.get(issue_id)
+    if not issue:
+        return jsonify({"message": "Issue not found"}), 404
+    reviews = ResolutionReview.query.filter_by(issue_id=issue.id).order_by(
+        ResolutionReview.submitted_at.desc(), ResolutionReview.id.desc()
+    ).all()
+    data = _issue_context(issue)
+    data["reviews"] = [serialize_review(review) for review in reviews]
+    return jsonify(data), 200
 
-    Accessible by Officers (to see status of their own submission) and
-    Chief Officers (to review the evidence). Citizens cannot access this.
-    """
-    user_id = get_jwt_identity()
-    user = User.query.get(int(user_id))
-
-    if not user or user.role not in ["Officer", "Chief Officer", "Admin"]:
-        return jsonify({"message": "Officer, Chief Officer, or Admin access required"}), 403
-
-    complaint = Complaint.query.get(complaint_id)
-    if not complaint:
-        return jsonify({"message": "Complaint not found"}), 404
-
-    # Return the most recent review (ordered by submission time descending).
-    review = (
-        ResolutionReview.query
-        .filter_by(complaint_id=complaint_id)
-        .order_by(ResolutionReview.submitted_at.desc())
-        .first()
-    )
-
-    return jsonify({
-        "complaint_id": complaint_id,
-        "review": serialize_review(review) if review else None,
-    }), 200
-
-
-# ---------------------------------------------------------------------------
-# GET  /chief-officer/resolution-queue
-# Chief Officer retrieves all complaints awaiting final review
-# ---------------------------------------------------------------------------
 
 @resolution_bp.route("/chief-officer/resolution-queue", methods=["GET"])
 @jwt_required()
-def get_resolution_queue():
-    """Return all complaints currently in the 'Pending Review' state,
-    including their pending resolution review data.
-
-    Only accessible by Chief Officers.
-    """
-    user_id = get_jwt_identity()
-    user = User.query.get(int(user_id))
-
-    if not user or user.role != "Chief Officer":
-        return jsonify({"message": "Chief Officer access required"}), 403
-
-    # Find all pending (undecided) resolution reviews.
-    pending_reviews = (
-        ResolutionReview.query
-        .filter_by(decision=None)
-        .order_by(ResolutionReview.submitted_at.asc())
-        .all()
-    )
-
+def resolution_queue():
+    _chief, denied = _require_roles(("Chief Officer",), "Chief Officer access required")
+    if denied:
+        return denied
+    reviews = ResolutionReview.query.filter_by(state="Pending").order_by(
+        ResolutionReview.submitted_at.asc(), ResolutionReview.id.asc()
+    ).all()
+    # "queue" keeps its meaning: reviews awaiting a decision.  "stale" lists
+    # reviews that were withdrawn by new information while their issue is
+    # still Pending Review; they cannot be approved, only resubmitted.
     return jsonify({
-        "total": len(pending_reviews),
         "queue": [
-            {
-                "review": serialize_review(rv),
-                "complaint": serialize_complaint(rv.complaint),
-            }
-            for rv in pending_reviews
+            {**_issue_context(review.issue), "review": serialize_review(review)}
+            for review in reviews
+        ],
+        "stale": [
+            {**_issue_context(review.issue), "review": serialize_review(review)}
+            for review in stale_reviews_awaiting_resubmission()
         ],
     }), 200
 
 
-# ---------------------------------------------------------------------------
-# PUT  /chief-officer/resolution-reviews/<review_id>/decide
-# Chief Officer approves or rejects a pending resolution request
-# ---------------------------------------------------------------------------
-
-@resolution_bp.route(
-    "/chief-officer/resolution-reviews/<int:review_id>/decide",
-    methods=["PUT"]
-)
+@resolution_bp.route("/chief-officer/resolution-reviews/<int:review_id>/decision", methods=["PUT"])
 @jwt_required()
 def decide_resolution_review(review_id):
-    """Approve or reject a pending final-resolution request.
-
-    On approval:
-      - complaint.status → "Resolved"
-    On rejection:
-      - complaint.status → "In Progress" (officer must re-submit evidence)
-      - rejection_note is stored (required when rejecting)
-
-    Security:
-      - Only "Chief Officer" role can call this.
-      - The submitting officer cannot review their own request.
-      - A request already decided cannot be decided again (no double-approval).
-    """
-    user_id = get_jwt_identity()
-    user = User.query.get(int(user_id))
-
-    if not user or user.role != "Chief Officer":
-        return jsonify({"message": "Chief Officer access required"}), 403
-
-    rv = ResolutionReview.query.get(review_id)
-    if not rv:
+    chief, denied = _require_roles(("Chief Officer",), "Chief Officer access required")
+    if denied:
+        return denied
+    review = ResolutionReview.query.get(review_id)
+    if not review:
         return jsonify({"message": "Resolution review not found"}), 404
+    if review.submitted_by == chief.id:
+        return jsonify({"message": "The submitting officer cannot decide this review"}), 403
+    if review.state != "Pending":
+        return jsonify({"message": f"This review is already {review.state.lower()}"}), 409
 
-    # Prevent double-approval / double-rejection.
-    if rv.decision is not None:
-        return jsonify({
-            "message": f"This review has already been decided: {rv.decision}"
-        }), 400
-
-    # Prevent self-review: the submitting officer cannot be the reviewer.
-    if rv.submitted_by == user.id:
-        return jsonify({
-            "message": "The submitting Officer cannot review their own resolution request"
-        }), 403
-
-    data = request.get_json()
-    if not data:
-        return jsonify({"message": "Request body is required"}), 400
-
+    data = request.get_json() or {}
     decision = (data.get("decision") or "").strip()
-    if decision not in REVIEW_DECISIONS:
-        return jsonify({
-            "message": "Invalid decision",
-            "allowed_decisions": REVIEW_DECISIONS,
-        }), 400
+    if decision not in ("Approved", "Rejected"):
+        return jsonify({"message": "Decision must be Approved or Rejected"}), 400
 
-    rejection_note = (data.get("rejection_note") or "").strip()
-    if decision == "Rejected" and not rejection_note:
-        return jsonify({"message": "A rejection note is required when rejecting a resolution request"}), 400
+    issue = review.issue
+    if decision == "Rejected":
+        reason = (data.get("rejection_reason") or "").strip()
+        if len(reason) < 10:
+            return jsonify({"message": "A meaningful rejection reason is required"}), 400
+        try:
+            transitioned = ResolutionReview.query.filter_by(
+                id=review.id, state="Pending"
+            ).update({
+                "state": "Rejected",
+                "reviewed_by": chief.id,
+                "reviewed_at": utc_now(),
+                "rejection_reason": reason,
+            }, synchronize_session=False)
+            if transitioned != 1:
+                raise WorkflowError("This review has already been decided")
+            change_issue_status(issue, "In Progress", chief.id)
+            db.session.commit()
+        except WorkflowError as error:
+            db.session.rollback()
+            return jsonify({"message": str(error)}), 409
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception("Failed to reject resolution review")
+            return jsonify({"message": "Could not decide the resolution review"}), 500
+        return jsonify({"message": "Resolution review rejected"}), 200
 
-    rv.decision = decision
-    rv.reviewed_by = user.id
-    rv.reviewed_at = utc_now()
+    try:
+        approve_review(issue, review, chief.id)
+        db.session.commit()
+    except StaleReviewError as error:
+        # The review's Stale marking is the outcome; keep it.
+        db.session.commit()
+        return jsonify({"message": str(error)}), 409
+    except WorkflowError as error:
+        db.session.rollback()
+        return jsonify({"message": str(error)}), 409
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Failed to approve resolution review")
+        return jsonify({"message": "Could not decide the resolution review"}), 500
 
-    complaint = rv.complaint
-
-    if decision == "Approved":
-        complaint.status = "Resolved"
-        rv.rejection_note = None
-    else:
-        # Revert to "In Progress" so the Officer can perform corrective work
-        # and re-submit evidence.
-        complaint.status = "In Progress"
-        rv.rejection_note = rejection_note
-
-    db.session.commit()
-
+    refreshed = db.session.get(ResolutionReview, review_id)
     return jsonify({
-        "message": f"Resolution review {decision.lower()}.",
-        "review": serialize_review(rv),
-        "complaint": serialize_complaint(complaint),
+        "message": "Resolution review approved",
+        "review": serialize_review(refreshed),
+        "issue": serialize_issue(issue),
     }), 200
