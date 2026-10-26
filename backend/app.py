@@ -4,6 +4,7 @@ import sqlite3
 from flask import Flask, send_from_directory, jsonify
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
+from sqlalchemy import exists
 from werkzeug.exceptions import HTTPException
 
 from config import Config, ConfigurationError, LOOPBACK_HOSTS, resolve_server_options
@@ -13,6 +14,7 @@ from models.complaint import Complaint
 from models.civic_issue import CivicIssue
 from models.notification import Notification
 from models.ward import Ward, WardOfficerAssignment  # noqa: F401
+from models.role_change import RoleChange  # noqa: F401
 from models.performance import (  # noqa: F401
     FOLLOW_UP_EVENT_TYPES,
     FOLLOW_UP_STATES,
@@ -539,6 +541,70 @@ def migrate_ward_registry_schema():
         conn.close()
 
 
+def migrate_upload_reference_indexes():
+    """Index the file-name columns that the /uploads guard looks up on every request.
+
+    New databases get these from the models; this adds them to older ones. Additive and idempotent.
+    """
+
+    db_uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+    if not db_uri.startswith("sqlite:///"):
+        return
+
+    db_path = db_uri[len("sqlite:///"):]
+    if not os.path.exists(db_path):
+        return
+
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        tables = {
+            row[0] for row in cur.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
+        }
+        for table in ("issue_work_updates", "resolution_reviews", "resolution_follow_up_events"):
+            if table in tables:
+                cur.execute(f"CREATE INDEX IF NOT EXISTS ix_{table}_image_filename ON {table}(image_filename)")
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def migrate_role_change_schema():
+    """Make the Admin role-change audit trail append-only.
+
+    The table itself comes from ``db.create_all()``.  Triggers reject any later
+    UPDATE or DELETE, so a recorded role change can never be rewritten.  Additive
+    and idempotent; nothing is rebuilt or seeded.
+    """
+
+    db_uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+    if not db_uri.startswith("sqlite:///"):
+        return
+
+    db_path = db_uri[len("sqlite:///"):]
+    if not os.path.exists(db_path):
+        return
+
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        tables = {
+            row[0] for row in cur.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
+        if "role_changes" in tables:
+            for event in ("UPDATE", "DELETE"):
+                cur.execute(
+                    f"CREATE TRIGGER IF NOT EXISTS role_changes_immutable_{event.lower()} "
+                    f"BEFORE {event} ON role_changes "
+                    "BEGIN SELECT RAISE(ABORT, 'Role change history is immutable'); END"
+                )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def migrate_performance_schema():
     """Additive, idempotent protections for ratings and follow-ups.
 
@@ -592,6 +658,10 @@ def migrate_performance_schema():
                 ("submitter_only",
                  "NEW.rated_officer_id IS NOT (SELECT submitted_by FROM resolution_reviews WHERE id = NEW.resolution_review_id)",
                  "The rated officer must be the review submitter"),
+                # Covers work submitted before the rater was promoted to Chief Officer.
+                ("no_self_rating",
+                 "NEW.rated_by IS NEW.rated_officer_id",
+                 "A Chief Officer cannot rate work they submitted themselves"),
             ]
             for name, condition, message in rules:
                 cur.execute(
@@ -662,6 +732,8 @@ with app.app_context():
     migrate_resolution_workflow_schema()
     migrate_ward_registry_schema()
     migrate_performance_schema()
+    migrate_role_change_schema()
+    migrate_upload_reference_indexes()
 
 
 @jwt.token_in_blocklist_loader
@@ -703,9 +775,26 @@ def handle_unexpected_exception(error):
     return jsonify({"message": "Something went wrong on the server."}), 500
 
 
+def is_private_upload(filename):
+    """True if a staff-only record refers to this stored file name."""
+    return bool(
+        db.session.query(exists().where(IssueWorkUpdate.image_filename == filename)).scalar()
+        or db.session.query(exists().where(ResolutionReview.image_filename == filename)).scalar()
+        or db.session.query(exists().where(FollowUpEvent.image_filename == filename)).scalar()
+    )
+
+
 @app.route("/uploads/<path:filename>")
 def serve_upload(filename):
-    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
+    # Photos that belong to staff records (field work, completion evidence, corrections) are
+    # served only through authenticated endpoints. Files uploaded before that change may still sit
+    # in this folder; they are neither moved nor deleted, but this route refuses to serve them.
+    if is_private_upload(filename):
+        return jsonify({"message": "Not found"}), 404
+    response = send_from_directory(app.config["UPLOAD_FOLDER"], filename)
+    # Browsers must not guess a different type for an uploaded file.
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @app.route("/api/health")
@@ -716,7 +805,7 @@ def health():
 @app.route("/")
 def home():
     return {
-        "message": "CivicPulse AI Backend Running 🚀"
+        "message": "CivicPulse AI Backend Running"
     }
 
 

@@ -1,9 +1,10 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, current_app, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from sqlalchemy import func
+from sqlalchemy import func, text
 
 from database.db import db
 from models.complaint import Complaint
+from models.role_change import RoleChange
 from models.user import User
 from utils.time_helper import to_iso8601
 
@@ -110,9 +111,33 @@ def get_users():
     }), 200
 
 
+ASSIGNABLE_ROLES = ("Citizen", "Officer", "Chief Officer", "Admin")
+
+
+def _role_response(target_user, message):
+    return jsonify({
+        "message": message,
+        "user": {
+            "id": target_user.id,
+            "name": target_user.name,
+            "email": target_user.email,
+            "role": target_user.role,
+        },
+    }), 200
+
+
 @admin_bp.route("/users/<int:target_user_id>/role", methods=["PUT"])
 @jwt_required()
 def update_user_role(target_user_id):
+    """Change a user's role. Admin only.
+
+    Two protections beyond the Admin check:
+    * The last active (non-suspended) Admin cannot be demoted, so the system can never
+      end up with nobody able to manage roles.  The check and the change are one SQL
+      statement, so two Admins demoting each other at the same moment cannot both succeed.
+    * Every applied change is written to ``role_changes`` in the same transaction.  If the
+      audit row cannot be written, the role change is rolled back with it.
+    """
     user_id = get_jwt_identity()
     admin = User.query.get(int(user_id))
 
@@ -123,23 +148,59 @@ def update_user_role(target_user_id):
     if not target_user:
         return jsonify({"message": "User not found"}), 404
 
-    data = request.get_json()
-    if not data or "role" not in data:
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or "role" not in data:
         return jsonify({"message": "Role is required"}), 400
 
     new_role = data["role"]
-    if new_role not in ["Citizen", "Officer", "Chief Officer", "Admin"]:
+    if not isinstance(new_role, str) or new_role not in ASSIGNABLE_ROLES:
         return jsonify({"message": "Invalid role. Must be Citizen, Officer, Chief Officer, or Admin"}), 400
 
-    target_user.role = new_role
-    db.session.commit()
+    old_role = target_user.role
+    if new_role == old_role:
+        return _role_response(target_user, f"User {target_user.email} already has the role {new_role}")
 
-    return jsonify({
-        "message": f"Role for user {target_user.email} updated to {new_role}",
-        "user": {
-            "id": target_user.id,
-            "name": target_user.name,
-            "email": target_user.email,
-            "role": target_user.role
-        }
-    }), 200
+    try:
+        if old_role == "Admin":
+            # Demoting an Admin: another active Admin must exist, decided inside the UPDATE itself.
+            result = db.session.execute(
+                text(
+                    "UPDATE users SET role = :new_role "
+                    "WHERE id = :id AND role = 'Admin' AND EXISTS ("
+                    "SELECT 1 FROM users other WHERE other.role = 'Admin' "
+                    "AND other.is_suspended = 0 AND other.id <> :id)"
+                ),
+                {"new_role": new_role, "id": target_user.id},
+            )
+        else:
+            # Compare-and-swap on the role we read, so a concurrent change is never overwritten.
+            result = db.session.execute(
+                text("UPDATE users SET role = :new_role WHERE id = :id AND role IS :old_role"),
+                {"new_role": new_role, "id": target_user.id, "old_role": old_role},
+            )
+
+        if result.rowcount != 1:
+            db.session.rollback()
+            db.session.expire_all()
+            current = db.session.get(User, target_user_id)
+            if old_role == "Admin" and current is not None and current.role == "Admin":
+                current_app.logger.warning(
+                    "Refused to demote the last active Admin (user id %s) by Admin id %s", target_user_id, admin.id
+                )
+                return jsonify({
+                    "message": "At least one active Admin must remain. Promote another Admin before demoting this one."
+                }), 409
+            return jsonify({"message": "This user's role changed while you were editing it. Reload and try again."}), 409
+
+        db.session.add(RoleChange(
+            target_user_id=target_user.id, changed_by=admin.id, old_role=old_role, new_role=new_role,
+        ))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Failed to change a user's role")
+        return jsonify({"message": "Could not change the role"}), 500
+
+    db.session.expire_all()
+    target_user = db.session.get(User, target_user_id)
+    return _role_response(target_user, f"Role for user {target_user.email} updated to {new_role}")

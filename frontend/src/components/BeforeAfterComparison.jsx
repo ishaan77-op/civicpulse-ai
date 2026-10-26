@@ -1,20 +1,22 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiErrorMessage } from '../services/api.js'
 import { getResolutionEvidence } from '../services/complaintservice.js'
-import { afterImageUrl, describeEvidence } from '../utils/citizenEvidence.js'
+import { afterImagePath, describeEvidence } from '../utils/citizenEvidence.js'
 import { formatDateTime } from '../utils/formatDateTime.js'
 import ImageLightbox from './ImageLightbox.jsx'
+import ProtectedImage from './ProtectedImage.jsx'
 
-function Panel({ label, sublabel, imageUrl, alt, emptyText, onZoom }) {
+// `imageUrl` is a public photo; `imagePath` is a private one fetched with the login token.
+function Panel({ label, sublabel, imageUrl, imagePath, alt, emptyText, onZoom }) {
   return (
     <figure className="ba-panel">
       <figcaption>
         <span className="ba-label">{label}</span> {sublabel}
       </figcaption>
-      {imageUrl ? (
-        <button type="button" className="ba-zoom" onClick={() => onZoom({ src: imageUrl, alt, caption: `${label} - ${sublabel}` })}
+      {imageUrl || imagePath ? (
+        <button type="button" className="ba-zoom" onClick={() => onZoom({ ...(imagePath ? { path: imagePath } : { src: imageUrl }), alt, caption: `${label} - ${sublabel}` })}
           aria-label={`View larger: ${alt}`}>
-          <img src={imageUrl} alt={alt} loading="lazy" />
+          {imagePath ? <ProtectedImage path={imagePath} alt={alt} /> : <img src={imageUrl} alt={alt} loading="lazy" />}
           <span aria-hidden="true" className="ba-zoom-hint">Tap to enlarge</span>
         </button>
       ) : (
@@ -62,7 +64,7 @@ export default function BeforeAfterComparison({ complaintId }) {
   if (!summary) return null // e.g. this report was not part of a resolution
 
   const approved = evidence.state === 'approved'
-  const afterUrl = afterImageUrl(evidence)
+  const afterPath = afterImagePath(evidence)
 
   return (
     <section className="ba-section" aria-labelledby="ba-heading">
@@ -82,7 +84,7 @@ export default function BeforeAfterComparison({ complaintId }) {
         />
         <Panel
           label="AFTER" sublabel={approved ? 'Completed work' : 'Awaiting approved completion'}
-          imageUrl={afterUrl} alt="Completed work photo"
+          imagePath={afterPath} alt="Completed work photo"
           emptyText={approved ? 'The completion photo is currently unavailable.' : 'No approved completion photo yet.'}
           onZoom={setZoomed}
         />
@@ -102,7 +104,7 @@ export default function BeforeAfterComparison({ complaintId }) {
         </div>
       )}
 
-      {zoomed && <ImageLightbox src={zoomed.src} alt={zoomed.alt} caption={zoomed.caption} onClose={closeZoom} />}
+      {zoomed && <ImageLightbox src={zoomed.src} path={zoomed.path} alt={zoomed.alt} caption={zoomed.caption} onClose={closeZoom} />}
     </section>
   )
 }

@@ -85,49 +85,49 @@ export default function AdminDashboard() {
           className={`tab-btn ${activeTab === 'analytics' ? 'active' : ''}`}
           onClick={() => setActiveTab('analytics')}
         >
-          📊 Analytics & Insights
+          Analytics & Insights
         </button>
         <button
           className={`tab-btn ${activeTab === 'users' ? 'active' : ''}`}
           onClick={() => setActiveTab('users')}
         >
-          👥 User Role Management ({users.length})
+          User Role Management ({users.length})
         </button>
         <button
           className={`tab-btn ${activeTab === 'heatmap' ? 'active' : ''}`}
           onClick={() => setActiveTab('heatmap')}
         >
-          🗺️ Heatmap
+          Heatmap
         </button>
         <button
           className={`tab-btn ${activeTab === 'spam' ? 'active' : ''}`}
           onClick={() => setActiveTab('spam')}
         >
-          🚩 Spam Review
+          Spam Review
         </button>
         <button
           className={`tab-btn ${activeTab === 'issues' ? 'active' : ''}`}
           onClick={() => setActiveTab('issues')}
         >
-          🧩 Issue Clusters
+          Issue Clusters
         </button>
         <button
           className={`tab-btn ${activeTab === 'community' ? 'active' : ''}`}
           onClick={() => setActiveTab('community')}
         >
-          🏙️ Community Intelligence
+          Community Intelligence
         </button>
         <button
           className={`tab-btn ${activeTab === 'moderation' ? 'active' : ''}`}
           onClick={() => setActiveTab('moderation')}
         >
-          💬 Community Moderation
+          Community Moderation
         </button>
         <button
           className={`tab-btn ${activeTab === 'wards' ? 'active' : ''}`}
           onClick={() => setActiveTab('wards')}
         >
-          🏘️ Wards
+          Wards
         </button>
       </div>
 
@@ -295,7 +295,7 @@ export default function AdminDashboard() {
                       </span>
                     </td>
                     <td>{u.spam_count ?? 0}/5</td>
-                    <td>{u.is_suspended ? '🚫 Suspended' : '—'}</td>
+                    <td>{u.is_suspended ? 'Suspended' : '—'}</td>
                     <td>
                       <select
                         value={u.role}

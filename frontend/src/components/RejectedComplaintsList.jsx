@@ -70,7 +70,7 @@ function RejectedComplaintsList({ onDecision }) {
                   <span className="complaint-category">{report.category || 'General'}</span>
                   <h2>{report.title}</h2>
                   <p className="officer-meta">
-                    📍 {report.location} &bull; Reported {formatDateTime(report.created_at)}
+                    {report.location} &bull; Reported {formatDateTime(report.created_at)}
                   </p>
                   {report.rejection?.reviewed_at && (
                     <p className="officer-meta">

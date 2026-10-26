@@ -127,7 +127,7 @@ function CameraCapture({ onCapture }) {
               className="button button-primary"
               onClick={capturePhoto}
             >
-              📷 Capture Photo
+              Capture Photo
             </button>
           )}
         </div>

@@ -129,7 +129,7 @@ export default function CommunityComments({ issueId, onCountChange }) {
             <li key={comment.id} className={`comment ${comment.author.is_official ? 'comment-official' : ''}`}>
               <div className="comment-head">
                 <span className="comment-author">
-                  {comment.author.is_official ? '🏛️' : '👤'} {comment.author.handle}
+                  {comment.author.is_official && <strong>Official </strong>}{comment.author.handle}
                   {comment.author.is_you && <em> (you)</em>}
                 </span>
                 <time dateTime={comment.created_at} title={formatDateTime(comment.created_at)}>

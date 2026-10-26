@@ -36,6 +36,7 @@ from services.resolution_workflow import (
     stale_reviews_awaiting_resubmission,
     validate_review_coverage,
 )
+from utils.private_files import send_private_image
 from utils.time_helper import to_iso8601, utc_now
 from utils.upload_validation import (
     UploadError,
@@ -102,7 +103,7 @@ def serialize_work_update(update):
         "officer_id": update.officer_id,
         "status": update.status,
         "note": update.note,
-        "image_url": f"/uploads/{update.image_filename}" if update.image_filename else None,
+        "image_path": f"/issues/{update.issue_id}/work-updates/{update.id}/image" if update.image_filename else None,
         "latitude": update.latitude,
         "longitude": update.longitude,
         "created_at": to_iso8601(update.created_at),
@@ -115,7 +116,7 @@ def serialize_review(review, include_dispositions=True):
         "issue_id": review.issue_id,
         "submitted_by": review.submitted_by,
         "completion_note": review.completion_note,
-        "image_url": f"/uploads/{review.image_filename}",
+        "image_path": f"/issues/{review.issue_id}/resolution-reviews/{review.id}/image",
         "latitude": review.latitude,
         "longitude": review.longitude,
         "issue_revision": review.issue_revision,
@@ -219,7 +220,7 @@ def create_work_update(issue_id):
         filename = None
         if original_filename:
             filename = f"{uuid.uuid4().hex}_{original_filename}"
-            saved_path = save_upload(image, current_app.config["UPLOAD_FOLDER"], filename)
+            saved_path = save_upload(image, current_app.config["PRIVATE_UPLOAD_FOLDER"], filename)
 
         update = IssueWorkUpdate(
             issue_id=issue.id,
@@ -268,6 +269,21 @@ def list_work_updates(issue_id):
         IssueWorkUpdate.created_at.asc(), IssueWorkUpdate.id.asc()
     ).all()
     return jsonify({"work_updates": [serialize_work_update(update) for update in updates]}), 200
+
+
+@resolution_bp.route("/issues/<int:issue_id>/work-updates/<int:update_id>/image", methods=["GET"])
+@jwt_required()
+def work_update_image(issue_id, update_id):
+    """A field-work photo. Staff only; the file is chosen from the stored record, never the request."""
+    _viewer, denied = _require_roles(STAFF_VIEWER_ROLES, "Staff access required")
+    if denied:
+        return denied
+    update = IssueWorkUpdate.query.filter_by(id=update_id, issue_id=issue_id).first()
+    return send_private_image(
+        update.image_filename if update else None,
+        current_app.config["PRIVATE_UPLOAD_FOLDER"], current_app.config["UPLOAD_FOLDER"],
+        not_found="Photo not found",
+    )
 
 
 @resolution_bp.route("/issues/<int:issue_id>/resolution-reviews", methods=["POST"])
@@ -347,7 +363,7 @@ def submit_resolution_review(issue_id):
     saved_path = None
     try:
         filename = f"{uuid.uuid4().hex}_{original_filename}"
-        saved_path = save_upload(image, current_app.config["UPLOAD_FOLDER"], filename)
+        saved_path = save_upload(image, current_app.config["PRIVATE_UPLOAD_FOLDER"], filename)
         # Eligibility above was read against this revision; if the issue has
         # changed since, the dispositions may no longer cover it.
         if not lock_issue_at_revision(issue.id, issue.review_revision):
@@ -408,6 +424,24 @@ def list_resolution_reviews(issue_id):
     data = _issue_context(issue)
     data["reviews"] = [serialize_review(review) for review in reviews]
     return jsonify(data), 200
+
+
+@resolution_bp.route("/issues/<int:issue_id>/resolution-reviews/<int:review_id>/image", methods=["GET"])
+@jwt_required()
+def resolution_review_image(issue_id, review_id):
+    """A completion-evidence photo, in any review state. Staff only.
+
+    Citizens see the approved photo through ``/complaints/<id>/resolution-evidence/after-image``,
+    which applies the citizen allow-list; they never reach this route."""
+    _viewer, denied = _require_roles(STAFF_VIEWER_ROLES, "Staff access required")
+    if denied:
+        return denied
+    review = ResolutionReview.query.filter_by(id=review_id, issue_id=issue_id).first()
+    return send_private_image(
+        review.image_filename if review else None,
+        current_app.config["PRIVATE_UPLOAD_FOLDER"], current_app.config["UPLOAD_FOLDER"],
+        not_found="Photo not found",
+    )
 
 
 @resolution_bp.route("/chief-officer/resolution-queue", methods=["GET"])

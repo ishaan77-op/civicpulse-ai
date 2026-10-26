@@ -105,7 +105,7 @@ function SpamReviewList({ onDecision }) {
                   )}
                   <h2>{report.title}</h2>
                   <p className="officer-meta">
-                    📍 {report.location} &bull; Reported {formatDateTime(report.created_at)}
+                    {report.location} &bull; Reported {formatDateTime(report.created_at)}
                   </p>
                   {report.spam_review?.spam_reviewed_at && (
                     <p className="officer-meta">

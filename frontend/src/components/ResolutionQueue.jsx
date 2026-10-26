@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiErrorMessage } from '../services/api.js'
 import { decideResolutionReview, getResolutionQueue } from '../services/resolutionservice.js'
 import { formatDateTime as formatDate } from '../utils/formatDateTime.js'
-import { statusClass, statusIcon, validateRejectionReason } from '../utils/resolution.js'
+import { statusClass, validateRejectionReason } from '../utils/resolution.js'
 import ResolutionEvidence from './ResolutionEvidence.jsx'
 
 // Approve/reject controls for ONE pending review. Stale reviews never get
@@ -86,7 +86,7 @@ function QueueCard({ entry, children }) {
       <div className="officer-card-header">
         <div>
           <span className="complaint-category">{issue.category || 'General'}</span>
-          <span className={`status-pill ${statusClass(issue.status)}`}>{statusIcon(issue.status)} {issue.status}</span>
+          <span className={`status-pill ${statusClass(issue.status)}`}>{issue.status}</span>
           <h2>{issue.location_label || 'Location not provided'}</h2>
           <p className="officer-meta">
             {issue.report_count} report{issue.report_count === 1 ? '' : 's'} &bull; Review #{review.id} submitted {formatDate(review.submitted_at)}

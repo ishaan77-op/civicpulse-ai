@@ -11,6 +11,7 @@ from models.resolution_review import ResolutionReview
 from database.db import db
 from services import community_service as community
 from services import impact_score_service as impact
+from utils.private_files import locate_image
 from utils.time_helper import to_iso8601, utc_now
 
 
@@ -249,7 +250,13 @@ def _upload_url_if_present(filename, upload_folder):
     return f"/uploads/{filename}"
 
 
-def citizen_resolution_view(complaint, upload_folder):
+def _private_path_if_present(filename, path, private_folder, legacy_folder):
+    """API path for a private photo, or None if no usable file exists (privately or, for files
+    uploaded before photos became private, in the public folder)."""
+    return path if locate_image(filename, private_folder, legacy_folder) else None
+
+
+def citizen_resolution_view(complaint, upload_folder, private_folder=None):
     """The only resolution data a citizen may see about their complaint.
 
     This is an allow-list, not a filtered staff payload.  Completion evidence
@@ -301,7 +308,11 @@ def citizen_resolution_view(complaint, upload_folder):
         view["work_submitted_at"] = to_iso8601(latest.submitted_at)
         view["approved_at"] = to_iso8601(latest.reviewed_at)
         view["after"] = {
-            "image_url": _upload_url_if_present(latest.image_filename, upload_folder),
+            # Authenticated path, never a public URL: only this allow-list can hand it out.
+            "image_path": _private_path_if_present(
+                latest.image_filename, f"/complaints/{complaint.id}/resolution-evidence/after-image",
+                private_folder, upload_folder,
+            ),
             "report": latest.completion_note,
         }
         return view

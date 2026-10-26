@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiErrorMessage } from '../services/api.js'
 import { removeSupport, supportIssue } from '../services/communityservice.js'
-import { CATEGORY_ICONS, plural, relativeTime, statusBadgeClass } from '../utils/community.js'
+import { plural, relativeTime, statusBadgeClass } from '../utils/community.js'
 
 export default function CommunityIssueCard({ issue, canEngage, onChange }) {
   const [busy, setBusy] = useState(false)
@@ -35,14 +35,14 @@ export default function CommunityIssueCard({ issue, canEngage, onChange }) {
       <Link to={detailPath} className="civic-card-link">
         <header className="civic-card-head">
           <span className="civic-category">
-            <span aria-hidden="true">{CATEGORY_ICONS[issue.category] || '📍'}</span> {issue.category}
+            {issue.category}
           </span>
           <span className="civic-time">{relativeTime(issue.updated_at)}</span>
         </header>
 
         <h2 className="civic-card-title">{issue.title}</h2>
         <p className="civic-location">
-          📍 {issue.location_label || 'Nashik'}
+          {issue.location_label || 'Nashik'}
           {typeof issue.distance_m === 'number' && (
             <span> · {issue.distance_m < 1000 ? `${issue.distance_m} m` : `${(issue.distance_m / 1000).toFixed(1)} km`} away</span>
           )}
@@ -92,7 +92,7 @@ export default function CommunityIssueCard({ issue, canEngage, onChange }) {
             ▲ {viewer.supported ? 'Supporting' : 'Support'}
           </button>
         )}
-        <Link className="civic-action" to={`${detailPath}#comments`}>💬 Comment</Link>
+        <Link className="civic-action" to={`${detailPath}#comments`}>Comment</Link>
         <Link className={`civic-action ${viewer.verification ? 'is-active' : ''}`} to={`${detailPath}#verify`}>
           ✓ {viewer.verification ? 'Verified' : 'Verify'}
         </Link>

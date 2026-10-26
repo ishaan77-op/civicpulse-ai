@@ -122,7 +122,11 @@ function LocateMeButton({ onLocate, loading }) {
       aria-label="Use my current location"
       title="Use my current location"
     >
-      {loading ? '⏳' : '📍'}
+      {loading ? '...' : (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="6" /><path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+        </svg>
+      )}
     </button>
   )
 }
@@ -653,7 +657,7 @@ function MapPicker({
                 searchLocation(event)
               }
             }}
-            placeholder="🔍 Search Nashik area, road or landmark..."
+            placeholder="Search Nashik area, road or landmark..."
             autoComplete="off"
             style={{
               width: '100%',
@@ -695,7 +699,7 @@ function MapPicker({
                       color: '#666',
                     }}
                   >
-                    🔎 Searching Nashik locations...
+                    Searching Nashik locations...
                   </div>
                 )}
 
@@ -727,8 +731,7 @@ function MapPicker({
                           color: '#222',
                         }}
                       >
-                        📍{' '}
-                        {result.display_name
+                                                {result.display_name
                           ?.split(',')
                           .slice(0, 2)
                           .join(', ')}
@@ -789,7 +792,7 @@ function MapPicker({
       >
         {loadingLocation
           ? '⏳ Detecting your location...'
-          : '📍 Use my current location'}
+          : 'Use my current location'}
       </button>
 
       {/* Errors */}
@@ -873,8 +876,8 @@ function MapPicker({
             }}
           >
             {confirmed
-              ? '✓ Location confirmed'
-              : '📍 Location selected'}
+              ? 'Location confirmed'
+              : 'Location selected'}
           </div>
 
           {/* Address */}
@@ -887,7 +890,7 @@ function MapPicker({
             }}
           >
             {loadingAddress ? (
-              '🔎 Finding address...'
+              'Finding address...'
             ) : selectedAddress ? (
               <>
                 <div
@@ -969,7 +972,7 @@ function MapPicker({
                   cursor: 'pointer',
                 }}
               >
-                ✓ Confirm Location
+                Confirm Location
               </button>
             )}
 

@@ -3,6 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 
 from database.db import db
 from models.notification import Notification
+from utils.text_cleanup import strip_emoji
 from utils.time_helper import to_iso8601
 
 notification_bp = Blueprint("notification", __name__)
@@ -12,7 +13,7 @@ def serialize_notification(notification):
     return {
         "id": notification.id,
         "complaint_id": notification.complaint_id,
-        "message": notification.message,
+        "message": strip_emoji(notification.message),
         "spam_count_at_time": notification.spam_count_at_time,
         "is_read": notification.is_read,
         "created_at": to_iso8601(notification.created_at),

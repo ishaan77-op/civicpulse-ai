@@ -89,7 +89,7 @@ export default function OfficerComplaintDetail() {
           </div>
 
           <p className="officer-meta">
-            📍 {complaint.location}
+            {complaint.location}
             {complaint.latitude != null && complaint.longitude != null && (
               <> ({Number(complaint.latitude).toFixed(5)}, {Number(complaint.longitude).toFixed(5)})</>
             )}

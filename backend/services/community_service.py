@@ -531,12 +531,12 @@ def notify_issue_status_changed(issue, new_status):
     for user_id, complaint_id in reporters.items():
         if new_status == "Resolved":
             message = (
-                f"✅ The civic issue you reported ({label}) has been officially marked Resolved by NMC. "
+                f"The civic issue you reported ({label}) has been officially marked Resolved by NMC. "
                 f"Thank you - your report contributed to this resolution. If it is still present, "
                 f"you can say so in the Community feed."
             )
         else:
-            message = f"🔧 NMC has started work on the civic issue you reported ({label}). Status: In Progress."
+            message = f"NMC has started work on the civic issue you reported ({label}). Status: In Progress."
         db.session.add(Notification(user_id=user_id, complaint_id=complaint_id, message=message))
 
     for user_id in supporters - set(reporters):

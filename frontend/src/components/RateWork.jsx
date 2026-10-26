@@ -4,6 +4,7 @@ import { getApprovedWork, getReviewRatings, rateReview } from '../services/perfo
 import { formatDateTime } from '../utils/formatDateTime.js'
 import { PAGE_SIZE, cleanParams, isLowRating, stars as starText, validateRating } from '../utils/performance.js'
 import ImageLightbox from './ImageLightbox.jsx'
+import ProtectedImage from './ProtectedImage.jsx'
 import Pager from './Pager.jsx'
 
 function RatingHistory({ reviewId }) {
@@ -163,9 +164,9 @@ export default function RateWork({ officers }) {
                     ? <p><strong>{starText(work.rating.stars)}</strong> {work.follow_up && <span className="resolution-chip chip-blocked">Follow-up: {work.follow_up.status}</span>}</p>
                     : <p className="resolution-muted">Not rated yet</p>}
                   <div className="rate-evidence">
-                    <button type="button" className="ba-zoom" onClick={() => setZoomed({ src: work.evidence.image_url, alt: 'Completion evidence submitted by the Officer' })}
+                    <button type="button" className="ba-zoom" onClick={() => setZoomed({ path: work.evidence.image_path, alt: 'Completion evidence submitted by the Officer' })}
                       aria-label="View the Officer's completion photo larger">
-                      <img src={work.evidence.image_url} alt="Completion evidence submitted by the Officer" loading="lazy" />
+                      <ProtectedImage path={work.evidence.image_path} alt="Completion evidence submitted by the Officer" />
                     </button>
                     <p><strong>Officer's completion note:</strong> {work.evidence.completion_note}</p>
                     <p className="resolution-muted">{work.evidence.dispositions} linked report{work.evidence.dispositions === 1 ? '' : 's'} addressed in this submission.</p>
@@ -191,7 +192,7 @@ export default function RateWork({ officers }) {
         </div>
       )}
       <Pager total={state.total} limit={state.limit} offset={state.offset} onChange={(offset) => setFilters({ ...filters, offset })} />
-      {zoomed && <ImageLightbox src={zoomed.src} alt={zoomed.alt} caption={zoomed.alt} onClose={() => setZoomed(null)} />}
+      {zoomed && <ImageLightbox path={zoomed.path} alt={zoomed.alt} caption={zoomed.alt} onClose={() => setZoomed(null)} />}
     </section>
   )
 }

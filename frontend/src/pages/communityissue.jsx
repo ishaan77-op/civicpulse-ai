@@ -12,10 +12,9 @@ import {
   verifyIssue,
   withdrawVerification,
 } from '../services/communityservice.js'
-import { CATEGORY_ICONS, VERIFICATION_OPTIONS, plural, statusBadgeClass } from '../utils/community.js'
+import { VERIFICATION_OPTIONS, plural, statusBadgeClass } from '../utils/community.js'
 import { formatDateTime } from '../utils/formatDateTime.js'
 
-const TIMELINE_ICONS = { reported: '📝', ai: '🤖', report_added: '➕', official: '🏛️', community: '👥' }
 
 export default function CommunityIssue() {
   const { id } = useParams()
@@ -94,8 +93,8 @@ export default function CommunityIssue() {
       <div className="issue-layout">
         <div className="issue-main">
           <section className="issue-panel">
-            <span className="civic-category"><span aria-hidden="true">{CATEGORY_ICONS[issue.category] || '📍'}</span> {issue.category}</span>
-            <p className="civic-location">📍 {issue.location_label || 'Nashik'}</p>
+            <span className="civic-category">{issue.category}</span>
+            <p className="civic-location">{issue.location_label || 'Nashik'}</p>
             {issue.summary && (
               <>
                 <h2 className="issue-subhead">AI summary</h2>
@@ -138,7 +137,7 @@ export default function CommunityIssue() {
             <ol className="issue-timeline">
               {issue.timeline.map((event, index) => (
                 <li key={`${event.kind}-${event.at}-${index}`} className={`timeline-${event.kind}`}>
-                  <span className="timeline-icon" aria-hidden="true">{TIMELINE_ICONS[event.kind] || '•'}</span>
+                  <span className="timeline-icon" aria-hidden="true">•</span>
                   <div>
                     <strong>{event.label}</strong>
                     {event.detail && <p>{event.detail}</p>}
@@ -152,7 +151,7 @@ export default function CommunityIssue() {
 
         <aside className="issue-side">
           <section className="signal-panel signal-official" aria-labelledby="official-heading">
-            <p className="signal-kicker">🏛️ Official · NMC</p>
+            <p className="signal-kicker">Official · NMC</p>
             <h2 id="official-heading" className="visually-hidden">Official municipal information</h2>
             <dl>
               <div><dt>Status</dt><dd><span className={statusBadgeClass(official.status)}>{official.status}</span></dd></div>
@@ -163,7 +162,7 @@ export default function CommunityIssue() {
           </section>
 
           <section className="signal-panel signal-community" aria-labelledby="community-heading" id="verify">
-            <p className="signal-kicker">👥 Community signal</p>
+            <p className="signal-kicker">Community signal</p>
             <h2 id="community-heading" className="visually-hidden">Community signal</h2>
 
             {issue.disputed && (

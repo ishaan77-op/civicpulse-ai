@@ -38,7 +38,8 @@ export function describeEvidence(evidence) {
   }
 }
 
-// The completion photo is only ever offered for an approved state with a file.
-export function afterImageUrl(evidence) {
-  return evidence?.state === 'approved' ? evidence.after?.image_url || null : null
+// The completion photo is only ever offered for an approved state with a file, and only as an
+// authenticated API path: it is fetched with the login token, never linked publicly.
+export function afterImagePath(evidence) {
+  return evidence?.state === 'approved' ? evidence.after?.image_path || null : null
 }

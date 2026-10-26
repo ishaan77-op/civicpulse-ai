@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { afterImageUrl, describeEvidence } from './citizenEvidence.js'
+import { afterImagePath, describeEvidence } from './citizenEvidence.js'
 
 test('only an approved state offers the completion photo', () => {
   assert.equal(describeEvidence({ state: 'approved' }).showAfter, true)
@@ -27,10 +27,12 @@ test('unknown and not-applicable states render nothing', () => {
 })
 
 test('the after image is ignored unless approved', () => {
-  const after = { image_url: '/uploads/final.jpg', report: 'done' }
-  assert.equal(afterImageUrl({ state: 'approved', after }), '/uploads/final.jpg')
-  assert.equal(afterImageUrl({ state: 'awaiting_review', after }), null)
-  assert.equal(afterImageUrl({ state: 'returned', after }), null)
-  assert.equal(afterImageUrl({ state: 'approved', after: { image_url: null, report: 'done' } }), null)
-  assert.equal(afterImageUrl(undefined), null)
+  const after = { image_path: '/complaints/7/resolution-evidence/after-image', report: 'done' }
+  assert.equal(afterImagePath({ state: 'approved', after }), '/complaints/7/resolution-evidence/after-image')
+  assert.equal(afterImagePath({ state: 'awaiting_review', after }), null)
+  assert.equal(afterImagePath({ state: 'returned', after }), null)
+  assert.equal(afterImagePath({ state: 'approved', after: { image_path: null, report: 'done' } }), null)
+  // A public URL on the payload is never used for the completion photo.
+  assert.equal(afterImagePath({ state: 'approved', after: { image_url: '/uploads/final.jpg', report: 'done' } }), null)
+  assert.equal(afterImagePath(undefined), null)
 })

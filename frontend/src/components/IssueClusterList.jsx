@@ -122,7 +122,7 @@ function IssueClusterList() {
                   </div>
                   <div><strong>Comments:</strong> {issue.community.comments}</div>
                   {issue.community.disputed && (
-                    <div className="community-disputed">⚠ Citizens report this is still present after resolution</div>
+                    <div className="community-disputed">Warning: citizens report this is still present after resolution</div>
                   )}
                   <Link className="text-link" to={`/community/issues/${issue.id}`}>Open community thread →</Link>
                 </div>

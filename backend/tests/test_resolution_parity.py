@@ -67,7 +67,8 @@ def test_work_update_records_officer_status_note_photo_gps_and_server_time(clien
     update = response.get_json()["work_update"]
     officer = User.query.filter_by(email="officer@example.com").first()
     assert update["note"] == "Crew on site" and update["status"] == "In Progress"
-    assert update["image_url"] and update["latitude"] == 20.0123 and update["longitude"] == 73.7901
+    assert update["image_path"] == f"/issues/{issue_id}/work-updates/{update['id']}/image" and "image_url" not in update
+    assert update["latitude"] == 20.0123 and update["longitude"] == 73.7901
     assert update["officer_id"] == officer.id if "officer_id" in update else True
     assert not str(update["created_at"]).startswith("2001")  # the client cannot choose the time
     assert "999" not in json.dumps({k: update[k] for k in update if k.endswith("_id")})  # nor the identity

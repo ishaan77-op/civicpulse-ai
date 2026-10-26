@@ -7,12 +7,14 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from database.db import db
 from models.complaint import Complaint
 from models.notification import Notification
+from models.resolution_review import ResolutionReview
 from models.user import User
 from services.ai_service import analyze_complaint
 from services.issue_clustering import get_or_create_issue_for_complaint
 from services import community_service as community
 from services import impact_score_service as impact
 from services.resolution_workflow import bump_review_revision, citizen_resolution_view
+from utils.private_files import send_private_image
 from utils.time_helper import to_iso8601, utc_now
 from utils.upload_validation import UploadError, save_upload, validate_image_upload
 from utils.validators import ValidationError, parse_optional_coordinates
@@ -320,8 +322,38 @@ def get_resolution_evidence(complaint_id):
         return jsonify({"message": "Complaint not found"}), 404
 
     return jsonify({
-        "evidence": citizen_resolution_view(complaint, current_app.config["UPLOAD_FOLDER"])
+        "evidence": citizen_resolution_view(
+            complaint, current_app.config["UPLOAD_FOLDER"], current_app.config["PRIVATE_UPLOAD_FOLDER"]
+        )
     }), 200
+
+
+@complaint_bp.route("/<int:complaint_id>/resolution-evidence/after-image", methods=["GET"])
+@jwt_required()
+def get_resolution_after_image(complaint_id):
+    """The approved completion photo for this complaint's issue.
+
+    Same access rule as the evidence payload (the reporting citizen, or an Officer/Admin) and
+    the same allow-list: the photo is sent only when ``citizen_resolution_view`` itself would
+    show it, that is, for an approved review of an issue that is currently Resolved and a
+    report that took part in the resolution. In every other case the answer is the same 404.
+    """
+    complaint = _find_viewable_complaint(complaint_id, get_jwt_identity())
+    if not complaint:
+        return jsonify({"message": "Photo not found"}), 404
+
+    view = citizen_resolution_view(
+        complaint, current_app.config["UPLOAD_FOLDER"], current_app.config["PRIVATE_UPLOAD_FOLDER"]
+    )
+    if view["state"] != "approved" or not view["after"] or not view["after"]["image_path"]:
+        return jsonify({"message": "Photo not found"}), 404
+
+    review = ResolutionReview.query.filter_by(issue_id=complaint.issue_id).order_by(ResolutionReview.id.desc()).first()
+    return send_private_image(
+        review.image_filename if review else None,
+        current_app.config["PRIVATE_UPLOAD_FOLDER"], current_app.config["UPLOAD_FOLDER"],
+        not_found="Photo not found",
+    )
 
 
 # ==========================================

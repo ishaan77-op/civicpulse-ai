@@ -32,7 +32,13 @@ os.environ["UPLOAD_FOLDER"] = _test_upload_dir
 _test_private_upload_dir = tempfile.mkdtemp(prefix="civicpulse_test_private_uploads_")
 os.environ["PRIVATE_UPLOAD_FOLDER"] = _test_private_upload_dir
 
-from app import app as flask_app, migrate_performance_schema, migrate_resolution_workflow_schema, migrate_ward_registry_schema
+from app import (
+    app as flask_app,
+    migrate_performance_schema,
+    migrate_resolution_workflow_schema,
+    migrate_role_change_schema,
+    migrate_ward_registry_schema,
+)
 from database.db import db
 from models.user import User
 from services.auth_service import hash_password
@@ -50,6 +56,7 @@ def app():
         migrate_resolution_workflow_schema()
         migrate_ward_registry_schema()
         migrate_performance_schema()
+        migrate_role_change_schema()
         yield flask_app
         db.session.remove()
         db.drop_all()

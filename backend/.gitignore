@@ -28,3 +28,6 @@ test_combined_ai.py
 test_image.py
 test_nemotron.py
 test_auditor.py
+
+# Quarantined legacy photos (scripts/private_photo_migration.py)
+uploads_quarantine/

@@ -113,7 +113,7 @@ class FollowUpEvent(db.Model):
     actor_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     officer_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     note = db.Column(db.Text, nullable=True)
-    image_filename = db.Column(db.String(255), nullable=True)
+    image_filename = db.Column(db.String(255), nullable=True, index=True)
     created_at = db.Column(db.DateTime, nullable=False, default=utc_now)
 
     actor = db.relationship("User", foreign_keys=[actor_id])

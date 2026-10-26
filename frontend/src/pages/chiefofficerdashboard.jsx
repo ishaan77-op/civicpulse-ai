@@ -12,12 +12,12 @@ import { getOverview } from '../services/performanceservice.js'
 import { permissionMessage } from '../utils/performance.js'
 
 const TABS = [
-  { id: 'home', label: '🏠 Overview' },
-  { id: 'directory', label: '🗺️ Wards & Officers' },
-  { id: 'reviews', label: '✅ Resolution reviews' },
-  { id: 'quality', label: '⭐ Ratings & work quality' },
-  { id: 'followups', label: '🛠️ Corrective follow-ups' },
-  { id: 'analytics', label: '📊 Analytics' },
+  { id: 'home', label: 'Overview' },
+  { id: 'directory', label: 'Wards & Officers' },
+  { id: 'reviews', label: 'Resolution reviews' },
+  { id: 'quality', label: 'Ratings & work quality' },
+  { id: 'followups', label: 'Corrective follow-ups' },
+  { id: 'analytics', label: 'Analytics' },
 ]
 
 // Supervisory workspace: reviewing completed work, rating it, and following up

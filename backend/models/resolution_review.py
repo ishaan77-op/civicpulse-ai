@@ -30,7 +30,7 @@ class ResolutionReview(db.Model):
         db.Integer, db.ForeignKey("users.id"), nullable=False, index=True
     )
     completion_note = db.Column(db.Text, nullable=False)
-    image_filename = db.Column(db.String(255), nullable=False)
+    image_filename = db.Column(db.String(255), nullable=False, index=True)
     latitude = db.Column(db.Float, nullable=True)
     longitude = db.Column(db.Float, nullable=True)
     issue_revision = db.Column(db.Integer, nullable=False)

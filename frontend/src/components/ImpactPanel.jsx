@@ -45,7 +45,7 @@ export default function ImpactPanel() {
         </div>
         <div className="impact-score" aria-label={`Community Impact Score ${impact.impact_score}`}>
           <span>Community Impact</span>
-          <strong>⭐ {impact.impact_score}</strong>
+          <strong>{impact.impact_score}</strong>
         </div>
       </div>
 

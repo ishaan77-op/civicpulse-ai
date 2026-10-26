@@ -105,7 +105,7 @@ export default function Community() {
         <div className="search-box">
           <input
             type="search"
-            placeholder="🔎 Search civic issues by area, type or description…"
+            placeholder="Search civic issues by area, type or description…"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             aria-label="Search civic issues"

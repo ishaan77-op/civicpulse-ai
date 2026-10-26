@@ -128,6 +128,9 @@ def create_rating(review, chief, stars, explanation, revises_rating_id):
 
     Runs in the caller's transaction; the caller commits.  Raises PerformanceError.
     """
+    # Nobody rates their own work, including work submitted before being promoted to Chief Officer.
+    if review.submitted_by == chief.id:
+        raise PerformanceError("You cannot rate work you submitted yourself", status=403)
     if isinstance(stars, bool) or not isinstance(stars, int) or not 1 <= stars <= 5:
         raise PerformanceError("stars must be a whole number from 1 to 5")
     explanation = clean_text(explanation, "explanation", MAX_EXPLANATION)

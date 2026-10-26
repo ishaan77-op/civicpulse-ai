@@ -1,3 +1,4 @@
+import ProtectedImage from './ProtectedImage.jsx'
 import { formatDateTime as formatDate } from '../utils/formatDateTime.js'
 
 // Original citizen reports (with their own photos) next to the completion
@@ -43,7 +44,7 @@ export default function ResolutionEvidence({ complaints = [], checklist = [], re
         <section aria-label="Completion evidence">
           <h3>Completion evidence (submitted {formatDate(review.submitted_at)})</h3>
           <figure className="resolution-final">
-            <img src={review.image_url} alt="Completion evidence photo" loading="lazy" />
+            <ProtectedImage path={review.image_path} alt="Completion evidence photo" />
             <figcaption>Completion evidence photo</figcaption>
           </figure>
           <p><strong>Officer’s completion note:</strong> {review.completion_note}</p>

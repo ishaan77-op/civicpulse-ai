@@ -5,6 +5,7 @@ import { formatDateTime } from '../utils/formatDateTime.js'
 import { IMAGE_ACCEPT, toFormData } from '../utils/resolution.js'
 import { PAGE_SIZE, followUpActions, followUpTone, stars as starText, validateCorrection } from '../utils/performance.js'
 import FollowUpEvents from './FollowUpEvents.jsx'
+import ProtectedImage from './ProtectedImage.jsx'
 import Pager from './Pager.jsx'
 
 // The Officer's own original submission for the job being corrected (loaded on demand).
@@ -24,7 +25,7 @@ function WorkContext({ followUpId }) {
   if (state.status === 'error') return <p className="form-message error" role="alert">{state.error}</p>
   return (
     <div className="rate-evidence">
-      <img src={state.work.image_url} alt={state.work.by_this_officer ? 'Your completion evidence' : 'Completion evidence from the original submission'} loading="lazy" />
+      <ProtectedImage path={state.work.image_path} alt={state.work.by_this_officer ? 'Your completion evidence' : 'Completion evidence from the original submission'} />
       <p><strong>{state.work.by_this_officer ? 'Your completion note' : 'Completion note on the original submission'}:</strong> {state.work.completion_note}</p>
       <p className="resolution-muted">Submitted {formatDateTime(state.work.submitted_at)} • approved {formatDateTime(state.work.approved_at)}</p>
     </div>

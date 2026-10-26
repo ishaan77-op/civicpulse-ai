@@ -1011,7 +1011,7 @@ def test_officer_follow_up_detail_shows_own_work_context_only(client, people, of
     response = client.get(f"/api/officers/me/follow-ups/{fid}", headers=bearer(people["officer"]))
     assert response.status_code == 200
     data = response.get_json()["follow_up"]
-    assert data["work"]["by_this_officer"] is True and data["work"]["completion_note"] and data["work"]["image_url"].startswith("/uploads/")
+    assert data["work"]["by_this_officer"] is True and data["work"]["completion_note"] and data["work"]["image_path"].startswith("/issues/") and "image_url" not in data["work"]
     assert data["events"][1]["note"] == "Please redo the edge" and "actor" not in data["events"][1]
     assert client.get(f"/api/officers/me/follow-ups/{fid}", headers=bearer(second)).status_code == 404
     for role in ("chief", "admin", "citizen"):
@@ -1023,7 +1023,7 @@ def test_approved_work_listing_carries_the_evidence_being_rated(client, people):
     complaint, review = approved_job(client, people)
     item = client.get("/api/chief-officer/approved-work", headers=bearer(people["chief"])).get_json()["approved_work"][0]
     assert item["evidence"]["completion_note"] == review["completion_note"]
-    assert item["evidence"]["image_url"] == review["image_url"] and item["evidence"]["dispositions"] == 1
+    assert item["evidence"]["image_path"] == review["image_path"] and "image_url" not in item["evidence"] and item["evidence"]["dispositions"] == 1
 
 
 def test_officers_open_corrections_sort_ahead_of_closed_ones_across_pages(client, people, officer_user):

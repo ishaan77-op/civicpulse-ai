@@ -175,44 +175,44 @@ export default function OfficerDashboard() {
           className={`tab-btn ${view === 'list' ? 'active' : ''}`}
           onClick={() => setView('list')}
         >
-          📋 List View
+          List View
         </button>
         <button
           className={`tab-btn ${view === 'heatmap' ? 'active' : ''}`}
           onClick={() => setView('heatmap')}
         >
-          🗺️ Damage Heatmap
+          Damage Heatmap
         </button>
         <button
           className={`tab-btn ${view === 'spam' ? 'active' : ''}`}
           onClick={() => setView('spam')}
         >
-          🚩 Spam Review
+          Spam Review
         </button>
         <button
           className={`tab-btn ${view === 'issues' ? 'active' : ''}`}
           onClick={() => setView('issues')}
         >
-          🧩 Issue Clusters
+          Issue Clusters
         </button>
         <button
           className={`tab-btn ${view === 'rejected' ? 'active' : ''}`}
           onClick={() => setView('rejected')}
         >
-          🚫 Out of Scope
+          Out of Scope
         </button>
         <button
           className={`tab-btn ${view === 'moderation' ? 'active' : ''}`}
           onClick={() => setView('moderation')}
         >
-          💬 Community Moderation
+          Community Moderation
         </button>
         {user?.role === 'Officer' && (
           <button
             className={`tab-btn ${view === 'performance' ? 'active' : ''}`}
             onClick={() => setView('performance')}
           >
-            ⭐ My ratings &amp; corrections
+            My ratings &amp; corrections
           </button>
         )}
       </div>
@@ -299,7 +299,7 @@ export default function OfficerDashboard() {
                   )}
                   <h2>{item.title}</h2>
                   <p className="officer-meta">
-                    📍 {item.location} &bull; Reported {formatDate(item.created_at)}
+                    {item.location} &bull; Reported {formatDate(item.created_at)}
                   </p>
                 </div>
 
@@ -350,7 +350,7 @@ export default function OfficerDashboard() {
                   className="button button-outline"
                   id={`btn-view-detail-${item.id}`}
                 >
-                  🔧 Field-Work Updates →
+                  Field-work updates →
                 </Link>
               </div>
             </article>

@@ -10,12 +10,6 @@ export const DISPOSITIONS = ['Addressed', 'Duplicate Covered']
 export const MIN_REJECTION_REASON_LENGTH = 10
 export const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp'
 
-const STATUS_ICONS = { Pending: '🟡', 'In Progress': '🔵', 'Pending Review': '🟣', Resolved: '🟢' }
-
-export function statusIcon(status) {
-  return STATUS_ICONS[status] || '⚪'
-}
-
 export function statusClass(status) {
   return `status-select-${String(status || 'Pending').toLowerCase().replace(/\s+/g, '-')}`
 }
@@ -23,9 +17,9 @@ export function statusClass(status) {
 // Options for an officer's status dropdown: the two statuses they may set,
 // plus the current status shown (disabled) when it is one they cannot set.
 export function statusOptions(current) {
-  const options = OFFICER_SETTABLE_STATUSES.map((value) => ({ value, label: `${statusIcon(value)} ${value}`, disabled: false }))
+  const options = OFFICER_SETTABLE_STATUSES.map((value) => ({ value, label: value, disabled: false }))
   if (current && !OFFICER_SETTABLE_STATUSES.includes(current)) {
-    options.push({ value: current, label: `${statusIcon(current)} ${current}`, disabled: true })
+    options.push({ value: current, label: current, disabled: true })
   }
   return options
 }

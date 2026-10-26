@@ -35,7 +35,7 @@ class IssueWorkUpdate(db.Model):
     )
     status = db.Column(db.String(50), nullable=False, default="In Progress")
     note = db.Column(db.Text, nullable=False)
-    image_filename = db.Column(db.String(255), nullable=True)
+    image_filename = db.Column(db.String(255), nullable=True, index=True)
     latitude = db.Column(db.Float, nullable=True)
     longitude = db.Column(db.Float, nullable=True)
 

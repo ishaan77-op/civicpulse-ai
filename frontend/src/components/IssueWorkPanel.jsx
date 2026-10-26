@@ -3,7 +3,8 @@ import { AuthContext } from '../context/authcontextvalue.jsx'
 import { apiErrorMessage } from '../services/api.js'
 import { getIssueResolutionContext, getWorkUpdates } from '../services/resolutionservice.js'
 import { formatDateTime as formatDate } from '../utils/formatDateTime.js'
-import { reviewStateSummary, statusClass, statusIcon } from '../utils/resolution.js'
+import { reviewStateSummary, statusClass } from '../utils/resolution.js'
+import ProtectedImage from './ProtectedImage.jsx'
 import ResolutionEvidence from './ResolutionEvidence.jsx'
 import ResolutionSubmitForm from './ResolutionSubmitForm.jsx'
 import WorkUpdateForm from './WorkUpdateForm.jsx'
@@ -51,7 +52,7 @@ export default function IssueWorkPanel({ issueId, onChanged }) {
   return (
     <div className="issue-work-panel">
       <p>
-        Issue status: <span className={`status-pill ${statusClass(issue.status)}`}>{statusIcon(issue.status)} {issue.status}</span>
+        Issue status: <span className={`status-pill ${statusClass(issue.status)}`}>{issue.status}</span>
       </p>
       {summary && (
         <div className={`resolution-banner banner-${summary.tone}`} role="status">
@@ -70,7 +71,7 @@ export default function IssueWorkPanel({ issueId, onChanged }) {
               <li key={update.id}>
                 <strong>{update.status}</strong> &bull; {formatDate(update.created_at)}
                 <p>{update.note}</p>
-                {update.image_url && <img src={update.image_url} alt="Field-work progress evidence" loading="lazy" />}
+                {update.image_path && <ProtectedImage path={update.image_path} alt="Field-work progress evidence" />}
               </li>
             ))}
           </ul>

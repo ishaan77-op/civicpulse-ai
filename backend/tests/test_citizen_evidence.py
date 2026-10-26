@@ -7,6 +7,7 @@ from database.db import db
 from models.civic_issue import CivicIssue
 from models.complaint import Complaint
 from models.resolution_review import ResolutionReview
+from tests.helpers import JPEG_BYTES
 from tests.test_resolution_workflow import (
     auth,
     create_complaint,
@@ -39,6 +40,17 @@ def decide(client, chief, review_id, decision, reason=None):
     return client.put(
         f"/api/chief-officer/resolution-reviews/{review_id}/decision", json=body, headers=auth(chief)
     )
+
+
+def stored_name(review):
+    db.session.expire_all()
+    return db.session.get(ResolutionReview, review["id"]).image_filename
+
+
+def assert_review_photo_absent(raw, review):
+    """Neither the staff path nor the stored file name of a completion photo may reach a citizen."""
+    assert review["image_path"] not in raw
+    assert stored_name(review) not in raw
 
 
 def assert_no_staff_data(response):
@@ -74,7 +86,7 @@ def test_pending_review_exposes_status_but_no_completion_evidence(
     assert data["after"] is None
     assert data["approved_at"] is None
     raw = response.get_data(as_text=True)
-    assert review["image_url"] not in raw
+    assert_review_photo_absent(raw, review)
     assert COMPLETION_NOTE not in raw
     assert_no_staff_data(response)
 
@@ -89,7 +101,7 @@ def test_stale_review_still_reads_as_awaiting_verification(client, citizen_user,
     data = response.get_json()["evidence"]
     assert data["state"] == "awaiting_review"
     assert data["after"] is None
-    assert review["image_url"] not in response.get_data(as_text=True)
+    assert_review_photo_absent(response.get_data(as_text=True), review)
     assert_no_staff_data(response)
 
 
@@ -107,7 +119,7 @@ def test_rejected_review_is_returned_for_correction_without_evidence_or_reason(
     assert data["after"] is None and data["approved_at"] is None
     assert data["issue_status"] == "In Progress"
     raw = response.get_data(as_text=True)
-    assert review["image_url"] not in raw and COMPLETION_NOTE not in raw
+    assert_review_photo_absent(raw, review) and COMPLETION_NOTE not in raw
     assert_no_staff_data(response)
 
 
@@ -122,8 +134,12 @@ def test_approved_review_shows_before_and_after_separately(client, citizen_user,
     assert data["state"] == "approved"
     assert data["issue_status"] == "Resolved"
     assert data["before"]["image_url"] == original_url
-    assert data["after"]["image_url"] == review["image_url"]
-    assert data["after"]["image_url"] != data["before"]["image_url"]
+    # The approved photo is an authenticated path, never a public /uploads URL or the staff path.
+    after_path = f"/complaints/{complaint['id']}/resolution-evidence/after-image"
+    assert data["after"]["image_path"] == after_path
+    assert not data["after"]["image_path"].startswith("/uploads/")
+    assert data["after"]["image_path"] != data["before"]["image_url"]
+    assert_review_photo_absent(response.get_data(as_text=True), review)
     assert data["after"]["report"] == COMPLETION_NOTE
     assert data["work_submitted_at"] and data["approved_at"]
     assert_no_staff_data(response)
@@ -131,7 +147,10 @@ def test_approved_review_shows_before_and_after_separately(client, citizen_user,
     # The complaint itself still points at the untouched original photo.
     detail = client.get(f"/api/complaints/{complaint['id']}", headers=auth(citizen)).get_json()["complaint"]
     assert detail["image_url"] == original_url
-    assert set(data["after"]) == {"image_url", "report"}
+    assert set(data["after"]) == {"image_path", "report"}
+    photo = client.get(f"/api/complaints{after_path[len('/complaints'):]}", headers=auth(citizen))
+    assert photo.status_code == 200 and photo.data == JPEG_BYTES
+    assert photo.headers["X-Content-Type-Options"] == "nosniff" and "no-store" in photo.headers["Cache-Control"]
     assert set(data) == {"complaint_id", "state", "issue_status", "before", "work_submitted_at",
                          "returned_at", "approved_at", "after"}
 
@@ -156,11 +175,11 @@ def test_missing_completion_file_returns_the_report_without_a_broken_link(
     citizen, officer, chief, complaint = setup(client)
     review = submit_review(client, officer, complaint["civic_issue"]["id"], [complaint["id"]]).get_json()["review"]
     decide(client, chief, review["id"], "Approved")
-    os.remove(os.path.join(client.application.config["UPLOAD_FOLDER"], review["image_url"].rsplit("/", 1)[1]))
+    os.remove(os.path.join(client.application.config["PRIVATE_UPLOAD_FOLDER"], stored_name(review)))
 
     data = evidence(client, citizen, complaint["id"]).get_json()["evidence"]
     assert data["state"] == "approved"
-    assert data["after"]["image_url"] is None
+    assert data["after"]["image_path"] is None
     assert data["after"]["report"] == COMPLETION_NOTE
     assert data["before"]["image_url"]
 
@@ -202,7 +221,7 @@ def test_excluded_complaint_never_sees_the_issues_evidence(client, citizen_user,
     data = response.get_json()["evidence"]
     assert data["state"] == "not_applicable"
     assert data["after"] is None
-    assert review["image_url"] not in response.get_data(as_text=True)
+    assert_review_photo_absent(response.get_data(as_text=True), review)
     assert data["before"]["image_url"]
 
 

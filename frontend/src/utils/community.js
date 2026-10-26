@@ -1,14 +1,13 @@
-export const CATEGORY_ICONS = {
-  'Road Infrastructure': '🚧',
-  'Garbage and Waste': '🗑️',
-  'Water Supply': '🚰',
-  'Street Lighting': '💡',
-  Drainage: '🌊',
-  'Public Safety': '🛡️',
-  Other: '📍',
-}
+export const CATEGORIES = [
+  'Road Infrastructure',
+  'Garbage and Waste',
+  'Water Supply',
+  'Street Lighting',
+  'Drainage',
+  'Public Safety',
+  'Other',
+]
 
-export const CATEGORIES = Object.keys(CATEGORY_ICONS)
 
 export const VERIFICATION_OPTIONS = [
   { value: 'STILL_EXISTS', label: 'Yes, still exists', short: 'still present', icon: '✓' },

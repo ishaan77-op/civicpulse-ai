@@ -10,7 +10,7 @@ policy decision, so every endpoint here answers 403 to an Admin.
 import os
 import uuid
 
-from flask import Blueprint, current_app, jsonify, request, send_from_directory
+from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from sqlalchemy.exc import IntegrityError
 
@@ -21,6 +21,7 @@ from models.user import User
 from models.ward import Ward
 from services import performance as perf
 from services.performance import PerformanceError
+from utils.private_files import send_private_image
 from utils.time_helper import to_iso8601
 from utils.upload_validation import UploadError, save_upload, validate_image_upload
 
@@ -79,9 +80,6 @@ def _safe_remove(path):
             current_app.logger.warning("Could not remove a failed follow-up upload")
 
 
-_EVIDENCE_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
-
-
 def _evidence_path(follow_up, event, audience):
     prefix = "/chief-officer" if audience == "chief" else "/officers/me"
     return f"{prefix}/follow-ups/{follow_up.id}/events/{event.id}/image"
@@ -96,15 +94,7 @@ def _serve_correction_image(follow_up, event_id):
     caller learns nothing about records they cannot see."""
     event = FollowUpEvent.query.filter_by(id=event_id, follow_up_id=follow_up.id, event_type="CorrectionSubmitted").first()
     name = event.image_filename if event else None
-    folder = current_app.config["PRIVATE_UPLOAD_FOLDER"]
-    mimetype = _EVIDENCE_TYPES.get(os.path.splitext(name or "")[1].lower())
-    if (not name or not mimetype or name != os.path.basename(name) or name.startswith(".")
-            or not os.path.isfile(os.path.join(folder, name))):
-        return jsonify({"message": "Evidence not found"}), 404
-    response = send_from_directory(folder, name, mimetype=mimetype, conditional=False)
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["Cache-Control"] = "private, no-store"
-    return response
+    return send_private_image(name, current_app.config["PRIVATE_UPLOAD_FOLDER"])
 
 
 def _name(user):
@@ -285,7 +275,7 @@ def approved_work():
             # The submission being judged, so the rating is made with the evidence in view.
             "evidence": {
                 "completion_note": review.completion_note,
-                "image_url": f"/uploads/{review.image_filename}",
+                "image_path": f"/issues/{review.issue_id}/resolution-reviews/{review.id}/image",
                 "dispositions": len(review.complaint_dispositions),
             },
             "rating": ({"id": effective[review.id].id, "stars": effective[review.id].stars}
@@ -550,7 +540,7 @@ def my_follow_up(follow_up_id):
         "submitted_at": to_iso8601(review.submitted_at),
         "approved_at": to_iso8601(review.reviewed_at),
         "completion_note": review.completion_note,
-        "image_url": f"/uploads/{review.image_filename}",
+        "image_path": f"/issues/{review.issue_id}/resolution-reviews/{review.id}/image",
         "by_this_officer": review.submitted_by == officer.id,
     }
     return jsonify({"follow_up": data}), 200

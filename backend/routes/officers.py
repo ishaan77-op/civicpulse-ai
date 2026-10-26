@@ -227,14 +227,14 @@ def review_spam_report(complaint_id):
 
         if reported_user.is_suspended:
             message = (
-                f'🚩 Complaint Declined & Flagged — Your complaint "{complaint.title}" was '
+                f'Complaint Declined & Flagged — Your complaint "{complaint.title}" was '
                 f"reviewed and confirmed as a misreport/spam. Confirmed spam incidents: "
                 f"{reported_user.spam_count}/{SPAM_SUSPENSION_THRESHOLD}. Your account has been "
                 f"suspended according to system rules."
             )
         else:
             message = (
-                f'🚩 Complaint Declined & Flagged — Your complaint "{complaint.title}" was '
+                f'Complaint Declined & Flagged — Your complaint "{complaint.title}" was '
                 f"reviewed and determined to be a misreport/spam. Confirmed spam incidents: "
                 f"{reported_user.spam_count}/{SPAM_SUSPENSION_THRESHOLD}. Remaining incidents "
                 f"before suspension: {remaining}. Please ensure future complaints contain "
